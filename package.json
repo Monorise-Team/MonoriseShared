@@ -1,0 +1,34 @@
+{
+  "name": "monorise-shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wsp\u00f3lne biblioteki Monorise: @monorise-team/tokens, ui i config",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@monorise-team/playground...",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:versions": "node scripts/check-versions.mjs",
+    "check": "pnpm format:check && pnpm check:versions && turbo run lint typecheck test build",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@monorise-team/config": "workspace:*",
+    "eslint": "^10.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.1",
+    "prettier": "^3.10.1",
+    "turbo": "^2.11.13",
+    "typescript": "^6.0.3"
+  }
+}

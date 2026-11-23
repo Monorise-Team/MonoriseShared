@@ -1,0 +1,33 @@
+name: CI
+
+# Pełne kontrole na każdym pull requeście i wypchnięciu na dev i prod (repozytorium publiczne: minuty są
+# darmowe, ADR-0086): formatowanie, zgodność wersji, lint, typy, testy i build wszystkich paczek.
+
+on:
+  pull_request:
+  push:
+    branches: [dev, prod]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Format, lint, types, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check

@@ -1,0 +1,4 @@
+{
+  "extends": "@monorise-team/config/tsconfig/vite-app.json",
+  "include": ["src", "vite.config.ts"]
+}

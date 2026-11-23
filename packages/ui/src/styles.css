@@ -1,0 +1,283 @@
+/*
+ * @monorise-team/ui: system „Moonlight glass” z desktopowego Aven (ADR-0091).
+ *
+ * Aplikacja importuje ten plik po Tailwind CSS 4:
+ *
+ *   @import "tailwindcss";
+ *   @import "@monorise-team/ui/styles.css";
+ *
+ * Panele to szklane karty nad tłem (AppBackdrop): .mr-card z jedną z powierzchni .mr-side, .mr-middle,
+ * .mr-reading, .mr-strong. Okna, menu i dymki mają mocniejsze szkło (.mr-float, .mr-menu). Szkło
+ * (backdrop-filter) więzi elementy o stałej pozycji, więc okna renderujemy w portalu, poza kartą.
+ */
+@import "@monorise-team/tokens/tokens.css";
+@import "@monorise-team/tokens/tailwind.css";
+
+/* Klasy użyte w komponentach tej paczki (pliki obok tego w dist/) */
+@source "./";
+
+@layer base {
+  html {
+    font-family: var(--mr-font-sans);
+    color: var(--mr-text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--mr-backdrop);
+    background-attachment: fixed;
+  }
+
+  :where(
+    button,
+    a,
+    select,
+    summary,
+    [role="button"],
+    [role="menuitem"],
+    [role="tab"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline: 2px solid var(--mr-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--mr-accent) 30%, transparent);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--mr-scrollbar-thumb) transparent;
+  }
+}
+
+@layer components {
+  /* Tło pod kartami */
+  .mr-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--mr-backdrop);
+    color: var(--mr-backdrop-fg);
+  }
+
+  /* Pływająca szklana karta (pasek boczny, lista, czytanie, strony) */
+  .mr-card {
+    border-radius: var(--mr-card-radius);
+    border: 1px solid var(--mr-card-border);
+    box-shadow: var(--mr-card-shadow);
+    background-clip: padding-box;
+  }
+
+  .mr-side {
+    background-color: var(--mr-surface-side);
+    backdrop-filter: var(--mr-surface-side-filter);
+    -webkit-backdrop-filter: var(--mr-surface-side-filter);
+    text-shadow: var(--mr-text-shadow-panel);
+  }
+
+  .mr-middle {
+    background-color: var(--mr-surface-middle);
+    backdrop-filter: var(--mr-surface-middle-filter);
+    -webkit-backdrop-filter: var(--mr-surface-middle-filter);
+    text-shadow: var(--mr-text-shadow-middle);
+  }
+
+  .mr-reading {
+    background-color: var(--mr-surface-reading);
+    backdrop-filter: var(--mr-surface-reading-filter);
+    -webkit-backdrop-filter: var(--mr-surface-reading-filter);
+    text-shadow: var(--mr-text-shadow-panel);
+  }
+
+  /* Paski narzędzi i mocne powierzchnie w kartach */
+  .mr-strong {
+    background-color: var(--mr-surface-strong);
+  }
+
+  /* Menu, listy podpowiedzi */
+  .mr-menu {
+    background-color: var(--mr-surface-menu);
+    backdrop-filter: var(--mr-surface-float-filter);
+    -webkit-backdrop-filter: var(--mr-surface-float-filter);
+    border: 1px solid var(--mr-card-border);
+    border-radius: var(--mr-menu-radius);
+    box-shadow: var(--mr-glass-shadow-elevated);
+    text-shadow: none;
+  }
+
+  /* Okna dialogowe, dymki, powiadomienia */
+  .mr-float {
+    background-color: var(--mr-surface-float);
+    backdrop-filter: var(--mr-surface-float-filter);
+    -webkit-backdrop-filter: var(--mr-surface-float-filter);
+    border: 1px solid var(--mr-card-border);
+    box-shadow: var(--mr-glass-shadow-elevated), var(--mr-glass-highlight);
+    text-shadow: none;
+  }
+
+  .mr-overlay {
+    background-color: var(--mr-overlay);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  /* Wiersze list (wątki, pozycje nawigacji) */
+  .mr-row {
+    border-radius: var(--mr-row-radius);
+  }
+
+  .mr-glow {
+    filter: var(--mr-glow-primary);
+  }
+
+  .mr-progress-track {
+    background: var(--mr-progress-track);
+  }
+
+  .mr-progress-fill {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--mr-accent) 70%, transparent), var(--mr-accent));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--mr-accent) 40%, transparent);
+  }
+
+  .mr-progress-indeterminate {
+    animation: mr-progress-slide 1.4s ease-in-out infinite;
+  }
+
+  /* Tekst wprost na tle (np. pasek tytułu) */
+  .mr-backdrop-text {
+    color: var(--mr-backdrop-fg);
+  }
+
+  /* Pole tekstowe i przyciski nie dziedziczą cienia tekstu ze szkła */
+  .mr-no-text-shadow,
+  input,
+  textarea,
+  select {
+    text-shadow: none;
+  }
+
+  /* Reakcja przycisku: bez przesuwania układu i bez ruchu, gdy wyłączony */
+  .mr-press {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+    transition-duration: var(--mr-anim-fast);
+    transition-timing-function: var(--mr-ease-out);
+  }
+
+  .mr-press:not(:disabled):active {
+    transform: scale(0.985);
+  }
+
+  /* Wejścia i wyjścia (Radix ustawia data-state) */
+  .mr-animate-overlay[data-state="open"] {
+    animation: mr-fade-in var(--mr-anim-normal) var(--mr-ease-out);
+  }
+
+  .mr-animate-overlay[data-state="closed"] {
+    animation: mr-fade-out var(--mr-anim-exit) var(--mr-ease-in);
+  }
+
+  .mr-animate-panel[data-state="open"] {
+    animation: mr-pop-in var(--mr-anim-normal) var(--mr-ease-out);
+  }
+
+  .mr-animate-panel[data-state="closed"] {
+    animation: mr-pop-out var(--mr-anim-exit) var(--mr-ease-in);
+  }
+
+  .mr-animate-menu[data-state="open"] {
+    animation: mr-menu-in var(--mr-anim-fast) var(--mr-ease-out);
+  }
+
+  .mr-enter {
+    animation: mr-fade-up var(--mr-anim-enter) var(--mr-ease-out) both;
+  }
+}
+
+@keyframes mr-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mr-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes mr-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--mr-anim-rise)) scale(0.98);
+  }
+}
+
+@keyframes mr-pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+@keyframes mr-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes mr-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(var(--mr-anim-rise));
+  }
+}
+
+@keyframes mr-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* Bez szkła: ustawienie użytkownika (klasa no-glass na <html>) albo system z ograniczoną przezroczystością */
+:root.no-glass .mr-side,
+:root.no-glass .mr-middle,
+:root.no-glass .mr-reading,
+:root.no-glass .mr-menu,
+:root.no-glass .mr-float,
+:root.no-glass .mr-overlay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root.no-glass .mr-side,
+:root.no-glass .mr-middle,
+:root.no-glass .mr-reading {
+  background-color: var(--mr-bg-primary);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .mr-side,
+  .mr-middle,
+  .mr-reading {
+    background-color: var(--mr-bg-primary);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-progress-indeterminate {
+    animation: none;
+  }
+}
+
+:root.reduce-motion .mr-progress-indeterminate {
+  animation: none;
+}

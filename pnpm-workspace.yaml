@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - apps/*
+
+# Paczki z zewnątrz instalujemy dopiero 3 dni po publikacji (ochrona łańcucha dostaw, ADR-0076).
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  - "@monorise-team/*"

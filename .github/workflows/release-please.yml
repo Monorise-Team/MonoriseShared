@@ -1,0 +1,139 @@
+name: Release Please
+
+# Każde wypchnięcie na prod (scalony pull request dev -> prod albo pilna poprawka) kończy się wydaniem, jeśli
+# commity coś wydają (ADR-0087). Scalony pull request dev -> prod jest zatwierdzeniem: Release Please otwiera
+# albo aktualizuje swój pull request wersji (jedna wersja wszystkich paczek, CHANGELOG.md), ten workflow od razu
+# go scala, a Release Please oznacza wydanie vX.Y.Z. Potem paczki trafiają do GitHub Packages z oznaczeniem
+# `latest`, milestone wydania się zamyka, otwiera się następny, a prod wraca do dev.
+# Same chore, docs czy ci nie dają wydania: workflow kończy się wtedy po pierwszym kroku (i powrocie do dev).
+
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  packages: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created || steps.tag.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name || steps.tag.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: prod
+
+      # Pull request wersji szukamy po etykiecie: niezmieniony nie wraca w wynikach akcji
+      - name: Merge the release pull request
+        id: merge
+        if: steps.release.outputs.release_created != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          number=$(jq -rn --argjson pr "${RELEASE_PR:-null}" '$pr.number // empty')
+          for _ in 1 2 3; do
+            [ -n "$number" ] && break
+            number=$(gh pr list --repo "$GITHUB_REPOSITORY" --base prod --state open \
+              --label "autorelease: pending" --json number --jq '.[0].number // empty')
+            [ -n "$number" ] || sleep 10
+          done
+          if [ -z "$number" ]; then
+            echo "Nie ma czego wydać." >> "$GITHUB_STEP_SUMMARY"
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5; do
+            gh pr merge "$number" --repo "$GITHUB_REPOSITORY" --merge && break
+            [ "$attempt" = 5 ] && exit 1
+            sleep $((attempt * 10))
+          done
+          echo "merged=true" >> "$GITHUB_OUTPUT"
+          echo "Scalono pull request wersji #$number." >> "$GITHUB_STEP_SUMMARY"
+          # Release Please znajduje scalony pull request przez API
+          sleep 15
+
+      - uses: googleapis/release-please-action@v4
+        id: tag
+        if: steps.merge.outputs.merged == 'true'
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: prod
+
+      - name: Roll the release milestone
+        if: steps.release.outputs.release_created == 'true' || steps.tag.outputs.release_created == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          TAG: ${{ steps.release.outputs.tag_name || steps.tag.outputs.tag_name }}
+        with:
+          script: |
+            const RELEASE = /^v(\d+)\.(\d+)\.(\d+)$/;
+            const tag = process.env.TAG;
+            const [, major, minor, patch] = RELEASE.exec(tag).map(Number);
+            const next = `v${major}.${minor}.${patch + 1}`;
+            const all = await github.paginate(github.rest.issues.listMilestones, { ...context.repo, state: 'all', per_page: 100 });
+            let current = all.find((m) => m.title === tag);
+            const open = all.filter((m) => m.state === 'open' && RELEASE.test(m.title));
+            // Wydanie wyszło z inną wersją niż najbliższy milestone: zmieniamy jego nazwę
+            if (!current && open.length) {
+              const nearest = open.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))[0];
+              current = (await github.rest.issues.updateMilestone({ ...context.repo, milestone_number: nearest.number, title: tag })).data;
+            }
+            let upcoming = all.find((m) => m.title === next);
+            if (!upcoming) upcoming = (await github.rest.issues.createMilestone({ ...context.repo, title: next })).data;
+            if (current) {
+              const items = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, milestone: current.number, state: 'open', per_page: 100 });
+              for (const item of items) await github.rest.issues.update({ ...context.repo, issue_number: item.number, milestone: upcoming.number });
+              await github.rest.issues.updateMilestone({ ...context.repo, milestone_number: current.number, state: 'closed' });
+            }
+            await core.summary.addRaw(`Milestone ${tag} zamknięty, następny: ${next}.\n`).write();
+
+  publish:
+    name: Publish to GitHub Packages
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: "@monorise-team"
+      - run: pnpm install --frozen-lockfile
+      # Pełne kontrole na dokładnie wydawanym commicie: bez zielonego wyniku nic nie trafia do GitHub Packages
+      - run: pnpm check
+      - run: node scripts/set-version.mjs release
+      - run: pnpm --recursive --filter "./packages/*" publish --tag latest --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: echo "Opublikowano **${{ needs.release.outputs.tag_name }}** z oznaczeniem \`latest\`." >> "$GITHUB_STEP_SUMMARY"
+
+  # Wypchnięcie z GITHUB_TOKEN (scalenie pull requestu wersji) nie uruchamia innych workflowów, więc powrót
+  # prod do dev wywołujemy tutaj, po każdym wypchnięciu na prod
+  sync-dev:
+    name: Sync dev
+    needs: [release, publish]
+    if: always() && needs.release.result == 'success' && needs.publish.result != 'failure'
+    uses: Monorise-Team/.github/.github/workflows/sync-dev.yml@main
