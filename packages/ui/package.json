@@ -1,0 +1,63 @@
+{
+  "name": "@monorise-team/ui",
+  "version": "0.0.0",
+  "description": "Komponenty React Monorise w wyglądzie desktopowego Aven: szklane karty, Radix, Tailwind CSS 4",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Monorise-Team/MonoriseShared.git",
+    "directory": "packages/ui"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@monorise-team/tokens": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.76.0",
+    "radix-ui": "^1.8.1",
+    "tailwind-merge": "^3.7.1"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "@monorise-team/config": "workspace:*",
+    "@testing-library/jest-dom": "^8.0.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.15.0",
+    "jsdom": "^31.0.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}
