@@ -45,6 +45,8 @@ body:
         - tokens
         - ui
         - config
+        - auth
+        - permissions
         - playground
         - release
         - nie wiem
