@@ -1,0 +1,62 @@
+{
+  "name": "@monorise-team/auth",
+  "version": "0.0.0",
+  "description": "Logowanie produktów Monorise przez MonoriseCore: sprawdzanie tokenów, OAuth 2.1 z PKCE, sesje BFF i wtyczka Fastify",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Monorise-Team/MonoriseShared.git",
+    "directory": "packages/auth"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "default": "./dist/next.js"
+    },
+    "./fastify": {
+      "types": "./dist/fastify.d.ts",
+      "default": "./dist/fastify.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify-plugin": "^5.0.0",
+    "jose": "^6.2.0",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "fastify": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@monorise-team/config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "eslint": "^10.15.0",
+    "fastify": "^5.12.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

@@ -48,6 +48,8 @@ body:
         - tokens
         - ui
         - config
+        - auth
+        - permissions
         - playground
         - release
         - całe repozytorium
