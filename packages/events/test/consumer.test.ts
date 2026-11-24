@@ -249,6 +249,30 @@ describe("createEventConsumer", () => {
     await expect(consumer.handle({ invalid: true })).rejects.toBeInstanceOf(EventValidationError);
   });
 
+  it("ignores an unknown version of a type it has no handler for", async () => {
+    const isProcessed = vi.fn(async () => false);
+    const markProcessed = vi.fn(async () => {});
+    const consumer = createEventConsumer({
+      consumer: "timotime",
+      catalog,
+      processed: { isProcessed, markProcessed },
+      handlers: { "organization.sample.updated": async () => {} },
+    });
+
+    const other = otherEvent.create({
+      source: "core",
+      organizationId: ORG_ID,
+      resourceType: "other",
+      resourceId: RESOURCE_ID,
+      resourceVersion: 1,
+      data: { ok: true },
+    });
+
+    await expect(consumer.handle({ ...other, version: 2 })).resolves.toBe("ignored");
+    expect(isProcessed).not.toHaveBeenCalled();
+    expect(markProcessed).not.toHaveBeenCalled();
+  });
+
   it("does not mark processed when handler throws, allowing a retry to succeed", async () => {
     const { processed } = createMemoryStores<undefined>();
     let shouldFail = true;

@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { AnyEventDefinition, EventCatalog, EventDefinition } from "./define.js";
-import type { EventEnvelope } from "./envelope.js";
+import { eventEnvelopeSchema, type EventEnvelope } from "./envelope.js";
 
 export const CONSUMER_NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 
@@ -102,6 +102,13 @@ export function createEventConsumer<
 
   return {
     async handle(raw: unknown): Promise<EventHandleResult> {
+      // A consumer without a handler for this type ignores it, even in a version the catalog does not know.
+      // Invalid envelopes still go to catalog.parse below, which throws.
+      const peek = eventEnvelopeSchema.safeParse(raw);
+      if (peek.success && !Object.hasOwn(handlers, peek.data.type)) {
+        return "ignored";
+      }
+
       const parsed = catalog.parse(raw);
       if (parsed.status === "unknown") {
         return "ignored";
