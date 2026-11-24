@@ -17,6 +17,7 @@ export interface OperationDefinition {
   readonly requiresAuth: boolean;
   readonly enveloped: boolean;
   readonly noContent: boolean;
+  readonly paginated: boolean;
 }
 
 export const CORE_OPERATIONS = {
@@ -30,6 +31,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: false,
     noContent: true,
+    paginated: false,
   },
   createEmployee: {
     operationId: "createEmployee",
@@ -41,6 +43,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   createRole: {
     operationId: "createRole",
@@ -52,6 +55,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   createRoleAssignment: {
     operationId: "createRoleAssignment",
@@ -63,6 +67,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   createUnit: {
     operationId: "createUnit",
@@ -74,6 +79,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   deleteRoleAssignment: {
     operationId: "deleteRoleAssignment",
@@ -85,6 +91,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: false,
     noContent: true,
+    paginated: false,
   },
   deleteUnitMember: {
     operationId: "deleteUnitMember",
@@ -96,6 +103,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: false,
     noContent: true,
+    paginated: false,
   },
   getHealth: {
     operationId: "getHealth",
@@ -107,6 +115,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: false,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   getMe: {
     operationId: "getMe",
@@ -118,6 +127,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   getOpenApi: {
     operationId: "getOpenApi",
@@ -129,6 +139,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: false,
     enveloped: false,
     noContent: false,
+    paginated: false,
   },
   getOrganization: {
     operationId: "getOrganization",
@@ -140,6 +151,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   getProductPermissionSnapshot: {
     operationId: "getProductPermissionSnapshot",
@@ -148,9 +160,10 @@ export const CORE_OPERATIONS = {
     pathParams: ["productKey"],
     queryParams: ["accountId","organizationId"],
     hasBody: false,
-    requiresAuth: false,
+    requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   getRole: {
     operationId: "getRole",
@@ -162,6 +175,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   grantAppAccess: {
     operationId: "grantAppAccess",
@@ -173,6 +187,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   listAppAccess: {
     operationId: "listAppAccess",
@@ -184,6 +199,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listEmployees: {
     operationId: "listEmployees",
@@ -195,6 +211,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listEntitlements: {
     operationId: "listEntitlements",
@@ -206,6 +223,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listPermissions: {
     operationId: "listPermissions",
@@ -217,6 +235,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listProductDirectoryEmployees: {
     operationId: "listProductDirectoryEmployees",
@@ -225,9 +244,10 @@ export const CORE_OPERATIONS = {
     pathParams: ["productKey"],
     queryParams: ["cursor","employeeId","limit","organizationId"],
     hasBody: false,
-    requiresAuth: false,
+    requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listProductDirectoryUnitMembers: {
     operationId: "listProductDirectoryUnitMembers",
@@ -236,9 +256,10 @@ export const CORE_OPERATIONS = {
     pathParams: ["productKey"],
     queryParams: ["cursor","limit","organizationId","unitId"],
     hasBody: false,
-    requiresAuth: false,
+    requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listRoleAssignments: {
     operationId: "listRoleAssignments",
@@ -250,6 +271,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listRoles: {
     operationId: "listRoles",
@@ -261,6 +283,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listUnitMembers: {
     operationId: "listUnitMembers",
@@ -272,6 +295,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   listUnits: {
     operationId: "listUnits",
@@ -283,6 +307,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: true,
   },
   putUnitMember: {
     operationId: "putUnitMember",
@@ -294,6 +319,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   registerProductPermissions: {
     operationId: "registerProductPermissions",
@@ -302,9 +328,10 @@ export const CORE_OPERATIONS = {
     pathParams: ["productKey"],
     queryParams: [],
     hasBody: true,
-    requiresAuth: false,
+    requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   registerProductRoleTemplates: {
     operationId: "registerProductRoleTemplates",
@@ -313,9 +340,10 @@ export const CORE_OPERATIONS = {
     pathParams: ["productKey"],
     queryParams: [],
     hasBody: true,
-    requiresAuth: false,
+    requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   revokeAppAccess: {
     operationId: "revokeAppAccess",
@@ -327,6 +355,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: false,
     noContent: true,
+    paginated: false,
   },
   transferOrganizationOwner: {
     operationId: "transferOrganizationOwner",
@@ -338,6 +367,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   updateRole: {
     operationId: "updateRole",
@@ -349,6 +379,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
   updateUnit: {
     operationId: "updateUnit",
@@ -360,6 +391,7 @@ export const CORE_OPERATIONS = {
     requiresAuth: true,
     enveloped: true,
     noContent: false,
+    paginated: false,
   },
 } as const satisfies Record<string, OperationDefinition>;
 

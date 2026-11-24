@@ -54,13 +54,14 @@ function resolveLocalRef(document, value, seen = new Set()) {
 function isBearerSecurityScheme(document, schemeName) {
   const raw = document.components?.securitySchemes?.[schemeName];
   const scheme = resolveLocalRef(document, raw);
-  return Boolean(
-    scheme &&
-    typeof scheme === "object" &&
-    scheme.type === "http" &&
-    typeof scheme.scheme === "string" &&
-    scheme.scheme.toLowerCase() === "bearer",
-  );
+  if (!scheme || typeof scheme !== "object") {
+    return false;
+  }
+  if (scheme.type === "http" && typeof scheme.scheme === "string" && scheme.scheme.toLowerCase() === "bearer") {
+    return true;
+  }
+  // OAuth 2.0 / 2.1 (e.g. client_credentials `productOAuth`) and OpenID Connect also authenticate with Bearer tokens.
+  return scheme.type === "oauth2" || scheme.type === "openIdConnect";
 }
 
 function operationRequiresAuth(document, operation) {
@@ -137,10 +138,10 @@ function collectSchemaProperties(document, rawSchema) {
   return Object.keys(properties).length > 0 ? properties : null;
 }
 
-function operationUsesEnvelope(document, operation) {
+function getSuccessResponseSchema(document, operation) {
   const responses = operation.responses;
   if (!responses || typeof responses !== "object") {
-    return false;
+    return null;
   }
 
   const successKeys = Object.keys(responses)
@@ -148,17 +149,41 @@ function operationUsesEnvelope(document, operation) {
     .sort(compareCodepoint);
   const preferredKey = successKeys.includes("200") ? "200" : successKeys[0];
   if (!preferredKey) {
-    return false;
+    return null;
   }
 
   const response = resolveLocalRef(document, responses[preferredKey]);
-  const schema = response?.content?.["application/json"]?.schema;
+  return response?.content?.["application/json"]?.schema ?? null;
+}
+
+function operationUsesEnvelope(document, operation) {
+  const schema = getSuccessResponseSchema(document, operation);
   if (!schema) {
     return false;
   }
 
   const properties = collectSchemaProperties(document, schema);
   return Boolean(properties && "data" in properties && "meta" in properties && "error" in properties);
+}
+
+function operationIsPaginated(document, operation) {
+  const schema = getSuccessResponseSchema(document, operation);
+  if (!schema) {
+    return false;
+  }
+
+  const properties = collectSchemaProperties(document, schema);
+  if (!properties || !("data" in properties && "meta" in properties && "error" in properties)) {
+    return false;
+  }
+
+  const metaProperties = collectSchemaProperties(document, properties.meta);
+  if (!metaProperties || !("nextCursor" in metaProperties)) {
+    return false;
+  }
+
+  const dataSchema = resolveLocalRef(document, properties.data);
+  return Boolean(dataSchema && typeof dataSchema === "object" && dataSchema.type === "array");
 }
 
 function operationAllowsNoContent(document, operation) {
@@ -230,6 +255,7 @@ export function extractOperations(document) {
         requiresAuth: operationRequiresAuth(document, operation),
         enveloped: operationUsesEnvelope(document, operation),
         noContent: operationAllowsNoContent(document, operation),
+        paginated: operationIsPaginated(document, operation),
       });
     }
   }
@@ -254,6 +280,7 @@ function renderOperationsModule(operations) {
       `    requiresAuth: ${operation.requiresAuth},`,
       `    enveloped: ${operation.enveloped},`,
       `    noContent: ${operation.noContent},`,
+      `    paginated: ${operation.paginated},`,
       `  },`,
     ];
     return lines.join("\n");
@@ -273,6 +300,7 @@ function renderOperationsModule(operations) {
     "  readonly requiresAuth: boolean;",
     "  readonly enveloped: boolean;",
     "  readonly noContent: boolean;",
+    "  readonly paginated: boolean;",
     "}",
     "",
     "export const CORE_OPERATIONS = {",

@@ -17,7 +17,7 @@ export type AccessTokenProvider = () => string | null | undefined | Promise<stri
 export interface CoreClientOptions {
   /** Server origin (for example `http://localhost:3200` or `https://api.monorise.studio`). Operation paths already include `/core/v1`. */
   readonly baseUrl: string;
-  /** Provides the bearer token for operations that declare bearer security in the OpenAPI document. */
+  /** Provides the bearer token (user JWT or product machine token) for operations that declare security in the OpenAPI document. */
   readonly getAccessToken?: AccessTokenProvider;
   /** Custom `fetch` implementation (defaults to `globalThis.fetch`). */
   readonly fetch?: FetchFunction;
@@ -28,6 +28,20 @@ export interface CoreClientOptions {
 export interface CoreRequestOptions {
   readonly signal?: AbortSignal;
   readonly headers?: HeadersInit;
+}
+
+/** Single page returned by a cursor-paginated Core API list operation. */
+export interface PaginatedResult<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+/** Input shape accepted by a cursor-paginated Core API operation. */
+export interface PaginatedOperationInput extends CoreRequestOptions {
+  readonly query?: {
+    readonly cursor?: string;
+    readonly limit?: number;
+  };
 }
 
 type HasRequiredKeys<T> = {
@@ -88,17 +102,21 @@ type SuccessJsonPayload<Op> = Op extends { responses: infer R }
     : unknown
   : unknown;
 
-type UnwrapEnvelope<Payload, Enveloped extends boolean> = Enveloped extends true
-  ? Payload extends { data: infer Data; meta: unknown; error: null }
-    ? Data
-    : Payload
+type UnwrapEnvelope<Payload, Enveloped extends boolean, Paginated extends boolean> = Enveloped extends true
+  ? Paginated extends true
+    ? Payload extends { data: Array<infer Item>; meta: { nextCursor: string | null }; error: null }
+      ? PaginatedResult<Item>
+      : Payload
+    : Payload extends { data: infer Data; meta: unknown; error: null }
+      ? Data
+      : Payload
   : Payload;
 
 export type OperationResult<Op, Def extends OperationDefinition> = Def["noContent"] extends true
   ? SuccessJsonPayload<Op> extends void
     ? void
-    : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"]> | undefined
-  : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"]>;
+    : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"], Def["paginated"]> | undefined
+  : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"], Def["paginated"]>;
 
 type OperationMethod<Op, Def extends OperationDefinition> =
   HasRequiredKeys<OperationInput<Op>> extends true
@@ -220,7 +238,7 @@ function parseErrorEnvelope(
   return { code, message, details: parsedDetails, requestId };
 }
 
-function parseSuccessEnvelope(payload: unknown): { data: unknown } | null {
+function parseSuccessEnvelope(payload: unknown): { data: unknown; meta: Record<string, unknown> } | null {
   if (!isRecord(payload)) {
     return null;
   }
@@ -230,7 +248,7 @@ function parseSuccessEnvelope(payload: unknown): { data: unknown } | null {
   if (typeof payload.meta.requestId !== "string") {
     return null;
   }
-  return { data: payload.data };
+  return { data: payload.data, meta: payload.meta };
 }
 
 async function executeOperation(
@@ -352,6 +370,19 @@ async function executeOperation(
         { status: response.status },
       );
     }
+    if (operation.paginated) {
+      const { nextCursor } = successEnvelope.meta;
+      if (!Array.isArray(successEnvelope.data) || (nextCursor !== null && typeof nextCursor !== "string")) {
+        throw new CoreApiProtocolError(
+          `Core API returned an unexpected paginated response for ${operation.method} ${operation.path} (status ${response.status})`,
+          { status: response.status },
+        );
+      }
+      return {
+        items: successEnvelope.data,
+        nextCursor,
+      } satisfies PaginatedResult<unknown>;
+    }
     return successEnvelope.data;
   }
 
@@ -396,4 +427,47 @@ export function createOperationsClient<
  */
 export function createCoreClient(options: CoreClientOptions): CoreClient {
   return createOperationsClient<operations, typeof CORE_OPERATIONS>(CORE_OPERATIONS, options);
+}
+
+/**
+ * Iterates through all items of a cursor-paginated Core API operation, following
+ * `nextCursor` until the server returns `null`. Preserves `limit`, filters, `path`,
+ * `headers`, and `signal` on every page request.
+ */
+export function paginate<TInput extends PaginatedOperationInput, TItem>(
+  operation: (input?: TInput) => Promise<PaginatedResult<TItem>>,
+  input?: NoInfer<TInput>,
+): AsyncIterableIterator<TItem>;
+export function paginate<TInput extends PaginatedOperationInput, TItem>(
+  operation: (input: TInput) => Promise<PaginatedResult<TItem>>,
+  input: NoInfer<TInput>,
+): AsyncIterableIterator<TItem>;
+export async function* paginate<TInput extends PaginatedOperationInput, TItem>(
+  operation: (input: TInput) => Promise<PaginatedResult<TItem>>,
+  input?: TInput,
+): AsyncIterableIterator<TItem> {
+  let cursor = input?.query?.cursor;
+
+  for (;;) {
+    const pageInput =
+      cursor !== undefined
+        ? ({
+            ...input,
+            query: {
+              ...input?.query,
+              cursor,
+            },
+          } as TInput)
+        : (input as TInput);
+
+    const page = await operation(pageInput);
+    for (const item of page.items) {
+      yield item;
+    }
+
+    if (page.nextCursor === null) {
+      break;
+    }
+    cursor = page.nextCursor;
+  }
 }
