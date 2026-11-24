@@ -1,0 +1,43 @@
+{
+  "name": "@monorise-team/events",
+  "version": "0.0.0",
+  "description": "Zdarzenia Monorise: koperta komunikatu, definicje i katalog, outbox oraz odbiorca odporny na duplikaty i zmianę kolejności",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Monorise-Team/MonoriseShared.git",
+    "directory": "packages/events"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@monorise-team/config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "eslint": "^10.15.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}
