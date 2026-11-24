@@ -5,25 +5,42 @@ import {
   CoreApiProtocolError,
   CoreApiUnavailableError,
   createCoreClient,
+  paginate,
   type CoreClient,
   type CoreOperationId,
+  type DirectoryEmployee,
   type FetchFunction,
   type Health,
   type Me,
   type OpenApiDocument,
   type Organization,
+  type PaginatedResult,
+  type PermissionSnapshot,
+  type Unit,
+  type UnitMember,
+  type operations,
 } from "../src/index.js";
 
 const SECRET_TOKEN = "eyJhbGciOiJFZERTQSJ9.anna-secret-token.sig";
+const MACHINE_TOKEN = "eyJhbGciOiJFZERTQSJ9.timotime-machine-token.sig";
+
+const ORG_ID = "01936f4e-7d10-7a2b-8c3d-4e5f6a7b8c9d";
+const ANNA_ACCOUNT_ID = "01936f4e-8a1b-7c3d-9e2f-0a1b2c3d4e5f";
+const ANNA_EMPLOYEE_ID = "01936f4e-9b2c-7d4e-8f5a-6b7c8d9e0f1a";
+const JAN_ACCOUNT_ID = "01936f4e-8a1b-7c3d-9e2f-111111111111";
+const KRAKOW_UNIT_ID = "01936f4e-1000-7000-8000-000000000001";
+const TEAM_A_UNIT_ID = "01936f4e-1000-7000-8000-000000000002";
 
 const ANNA_ME: Me = {
   account: {
-    id: "01936f4e-8a1b-7c3d-9e2f-0a1b2c3d4e5f",
+    id: ANNA_ACCOUNT_ID,
     email: "anna@acme.test",
     status: "ACTIVE",
+    isOwner: false,
   },
   employee: {
-    id: "01936f4e-9b2c-7d4e-8f5a-6b7c8d9e0f1a",
+    id: ANNA_EMPLOYEE_ID,
+    accountId: ANNA_ACCOUNT_ID,
     firstName: "Anna",
     lastName: "Kowalska",
     workEmail: "anna@acme.test",
@@ -31,14 +48,14 @@ const ANNA_ME: Me = {
     status: "ACTIVE",
   },
   organization: {
-    id: "01936f4e-7d10-7a2b-8c3d-4e5f6a7b8c9d",
+    id: ORG_ID,
     name: "Acme",
     status: "ACTIVE",
   },
 };
 
 const ACME_ORGANIZATION: Organization = {
-  id: "01936f4e-7d10-7a2b-8c3d-4e5f6a7b8c9d",
+  id: ORG_ID,
   name: "Acme",
   status: "ACTIVE",
   createdAt: "2026-11-20T09:00:00Z",
@@ -49,6 +66,46 @@ const ACME_ORGANIZATION: Organization = {
       isPrimary: true,
       verifiedAt: "2026-11-20T09:15:00Z",
     },
+  ],
+};
+
+const KRAKOW_UNIT: Unit = {
+  id: KRAKOW_UNIT_ID,
+  name: "Oddział Kraków",
+  type: "BRANCH",
+  parentId: null,
+  status: "ACTIVE",
+  createdAt: "2026-11-20T10:00:00Z",
+  updatedAt: "2026-11-20T10:00:00Z",
+};
+
+const TEAM_A_UNIT: Unit = {
+  id: TEAM_A_UNIT_ID,
+  name: "Zespół Kraków A",
+  type: "TEAM",
+  parentId: KRAKOW_UNIT_ID,
+  status: "ACTIVE",
+  createdAt: "2026-11-20T10:05:00Z",
+  updatedAt: "2026-11-20T10:05:00Z",
+};
+
+const JAN_SNAPSHOT: PermissionSnapshot = {
+  accountId: JAN_ACCOUNT_ID,
+  organizationId: ORG_ID,
+  authzRevision: 4,
+  isOwner: false,
+  products: ["timotime"],
+  grants: [
+    {
+      permission: "timotime.entries.approve",
+      scope: { type: "UNIT", unitId: KRAKOW_UNIT_ID },
+      validFrom: null,
+      validUntil: null,
+    },
+  ],
+  units: [
+    { id: KRAKOW_UNIT_ID, parentId: null },
+    { id: TEAM_A_UNIT_ID, parentId: KRAKOW_UNIT_ID },
   ],
 };
 
@@ -171,6 +228,304 @@ describe("createCoreClient", () => {
     expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${SECRET_TOKEN}`);
   });
 
+  it("substitutes and URL-encodes multiple path parameters and sends JSON bodies on PUT/POST 201", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async (_url, init) => {
+      if (init?.method === "POST") {
+        return jsonResponse(
+          {
+            data: KRAKOW_UNIT,
+            meta: { requestId: "req_create_unit" },
+            error: null,
+          },
+          201,
+        );
+      }
+      return jsonResponse({
+        data: {
+          unitId: KRAKOW_UNIT_ID,
+          employeeId: ANNA_EMPLOYEE_ID,
+          role: "LEADER",
+          joinedAt: "2026-11-24T12:00:00Z",
+          employee: ANNA_ME.employee,
+        },
+        meta: { requestId: "req_put_member" },
+        error: null,
+      });
+    });
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    const created = await core.createUnit({
+      body: { name: "Oddział Kraków", type: "BRANCH", parentId: null },
+    });
+    expect(created).toEqual(KRAKOW_UNIT);
+    const [postUrl, postInit] = fetchMock.mock.calls[0]!;
+    expect(postUrl).toBe("http://localhost:3200/core/v1/units");
+    expect(postInit?.method).toBe("POST");
+    expect(new Headers(postInit?.headers).get("content-type")).toBe("application/json");
+    expect(postInit?.body).toBe(JSON.stringify({ name: "Oddział Kraków", type: "BRANCH", parentId: null }));
+
+    const member = await core.putUnitMember({
+      path: { unitId: "unit/krakow 1", employeeId: ANNA_EMPLOYEE_ID },
+      body: { role: "LEADER" },
+    });
+    expect(member.role).toBe("LEADER");
+    const [putUrl, putInit] = fetchMock.mock.calls[1]!;
+    expect(putUrl).toBe(`http://localhost:3200/core/v1/units/unit%2Fkrakow%201/members/${ANNA_EMPLOYEE_ID}`);
+    expect(putInit?.method).toBe("PUT");
+    expect(new Headers(putInit?.headers).get("content-type")).toBe("application/json");
+    expect(putInit?.body).toBe(JSON.stringify({ role: "LEADER" }));
+  });
+
+  it("serializes boolean, numeric, and repeatable array query parameters while omitting undefined", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async () =>
+      jsonResponse({
+        data: [],
+        meta: { requestId: "req_query_1", nextCursor: null },
+        error: null,
+      }),
+    );
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    await core.listRoles({
+      query: {
+        product: "timotime",
+        includeTemplates: false,
+        includeArchived: true,
+        limit: 25,
+        cursor: undefined,
+      },
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:3200/core/v1/roles?product=timotime&includeTemplates=false&includeArchived=true&limit=25",
+    );
+
+    await core.listProductDirectoryUnitMembers({
+      path: { productKey: "timotime" },
+      query: {
+        organizationId: ORG_ID,
+        unitId: [KRAKOW_UNIT_ID, TEAM_A_UNIT_ID],
+        limit: 50,
+      },
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `http://localhost:3200/core/v1/products/timotime/directory/unit-members?organizationId=${ORG_ID}&unitId=${KRAKOW_UNIT_ID}&unitId=${TEAM_A_UNIT_ID}&limit=50`,
+    );
+  });
+
+  it("handles 204 No Content for revokeAppAccess and deleteRoleAssignment", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async () => new Response(null, { status: 204 }));
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    const revoked = await core.revokeAppAccess({ path: { appAccessId: "01936f4e-2000-7000-8000-000000000001" } });
+    expect(revoked).toBeUndefined();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:3200/core/v1/app-access/01936f4e-2000-7000-8000-000000000001",
+    );
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("DELETE");
+
+    const deleted = await core.deleteRoleAssignment({
+      path: { assignmentId: "01936f4e-3000-7000-8000-000000000001" },
+    });
+    expect(deleted).toBeUndefined();
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "http://localhost:3200/core/v1/role-assignments/01936f4e-3000-7000-8000-000000000001",
+    );
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("DELETE");
+  });
+
+  it("returns { items, nextCursor } for paginated operations and rejects malformed list envelopes", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async () =>
+      jsonResponse({
+        data: [KRAKOW_UNIT],
+        meta: { requestId: "req_units_1", nextCursor: "cur_page_2" },
+        error: null,
+      }),
+    );
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    const page = await core.listUnits({ query: { limit: 1, status: "ACTIVE" } });
+    expect(page).toEqual({
+      items: [KRAKOW_UNIT],
+      nextCursor: "cur_page_2",
+    });
+
+    const badMetaCore = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: async () =>
+        jsonResponse({
+          data: [KRAKOW_UNIT],
+          meta: { requestId: "req_missing_cursor" },
+          error: null,
+        }),
+    });
+    await expect(badMetaCore.listUnits()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 200,
+    });
+
+    const badDataCore = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: async () =>
+        jsonResponse({
+          data: { notAnArray: true },
+          meta: { requestId: "req_bad_data", nextCursor: null },
+          error: null,
+        }),
+    });
+    await expect(badDataCore.listUnits()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 200,
+    });
+  });
+
+  it("iterates across multiple pages with paginate(), passing limit, filters, headers, and signal", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn<FetchFunction>(async (url) => {
+      const parsed = new URL(url);
+      if (parsed.searchParams.get("cursor") === "cur_2") {
+        return jsonResponse({
+          data: [TEAM_A_UNIT],
+          meta: { requestId: "req_units_p2", nextCursor: null },
+          error: null,
+        });
+      }
+      return jsonResponse({
+        data: [KRAKOW_UNIT],
+        meta: { requestId: "req_units_p1", nextCursor: "cur_2" },
+        error: null,
+      });
+    });
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    const units: Unit[] = [];
+    for await (const unit of paginate(core.listUnits, {
+      query: { limit: 1, status: "ACTIVE" },
+      headers: { "X-Trace-Test": "acme" },
+      signal: controller.signal,
+    })) {
+      units.push(unit);
+    }
+
+    expect(units).toEqual([KRAKOW_UNIT, TEAM_A_UNIT]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:3200/core/v1/units?limit=1&status=ACTIVE");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:3200/core/v1/units?limit=1&status=ACTIVE&cursor=cur_2");
+    expect(fetchMock.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("x-trace-test")).toBe("acme");
+  });
+
+  it("stops fetching further pages when the caller breaks out of paginate() early", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async () =>
+      jsonResponse({
+        data: [KRAKOW_UNIT],
+        meta: { requestId: "req_units_p1", nextCursor: "cur_2" },
+        error: null,
+      }),
+    );
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    const collected: Unit[] = [];
+    for await (const unit of paginate(core.listUnits)) {
+      collected.push(unit);
+      break;
+    }
+
+    expect(collected).toEqual([KRAKOW_UNIT]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("authenticates product machine-token operations via getAccessToken", async () => {
+    const getAccessToken = vi.fn(async () => MACHINE_TOKEN);
+    const fetchMock = vi.fn<FetchFunction>(async (url, init) => {
+      if (init?.method === "PUT") {
+        return jsonResponse({
+          data: { added: ["timotime.entries.approve"], updated: [], deprecated: [], restored: [], unchanged: 0 },
+          meta: { requestId: "req_reg_1" },
+          error: null,
+        });
+      }
+      expect(url).toBe(
+        `http://localhost:3200/core/v1/products/timotime/permission-snapshot?organizationId=${ORG_ID}&accountId=${JAN_ACCOUNT_ID}`,
+      );
+      return jsonResponse({
+        data: JAN_SNAPSHOT,
+        meta: { requestId: "req_snap_jan" },
+        error: null,
+      });
+    });
+
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken,
+      fetch: fetchMock,
+    });
+
+    const snapshot = await core.getProductPermissionSnapshot({
+      path: { productKey: "timotime" },
+      query: { organizationId: ORG_ID, accountId: JAN_ACCOUNT_ID },
+    });
+
+    expect(snapshot).toEqual(JAN_SNAPSHOT);
+    expect(getAccessToken).toHaveBeenCalledTimes(1);
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(`Bearer ${MACHINE_TOKEN}`);
+
+    const regResult = await core.registerProductPermissions({
+      path: { productKey: "timotime" },
+      body: [{ key: "timotime.entries.approve", description: "Zatwierdzanie godzin pracy" }],
+    });
+    expect(regResult.added).toEqual(["timotime.entries.approve"]);
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("authorization")).toBe(`Bearer ${MACHINE_TOKEN}`);
+    expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(
+      JSON.stringify([{ key: "timotime.entries.approve", description: "Zatwierdzanie godzin pracy" }]),
+    );
+
+    const noTokenCore = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      fetch: fetchMock,
+    });
+    await expect(
+      noTokenCore.getProductPermissionSnapshot({
+        path: { productKey: "timotime" },
+        query: { organizationId: ORG_ID, accountId: JAN_ACCOUNT_ID },
+      }),
+    ).rejects.toMatchObject({
+      name: "CoreApiMissingTokenError",
+      operationId: "getProductPermissionSnapshot",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("forwards per-call headers and AbortSignal", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn<FetchFunction>(async () =>
@@ -257,7 +612,10 @@ describe("createCoreClient", () => {
       code: "VALIDATION_FAILED" as const,
       message: "Validation failed.",
       requestId: "req_validation_3",
-      details: [{ field: "email", message: "Invalid email address" }],
+      details: [
+        { field: "name", message: "Name is required" },
+        { field: "type", message: "Invalid unit type" },
+      ],
     },
   ])(
     "maps Core error envelope $code ($status) to CoreApiError",
@@ -279,7 +637,7 @@ describe("createCoreClient", () => {
         fetch: fetchMock,
       });
 
-      const caught = await core.getMe().catch((err: unknown) => err);
+      const caught = await core.createUnit({ body: { name: "", type: "BRANCH" } }).catch((err: unknown) => err);
       expect(caught).toBeInstanceOf(CoreApiError);
       const apiError = caught as CoreApiError;
       expect(apiError.name).toBe("CoreApiError");
@@ -437,17 +795,34 @@ describe("createCoreClient", () => {
     }
   });
 
-  it("exposes accurate generated TypeScript return types for every Core operation", () => {
+  it("exposes accurate generated TypeScript return types for Core operations and paginate()", () => {
     const core = createCoreClient({
       baseUrl: "http://localhost:3200",
       fetch: async () => jsonResponse({}),
     });
 
     expectTypeOf<keyof CoreClient>().toEqualTypeOf<CoreOperationId>();
-    expectTypeOf<CoreOperationId>().toEqualTypeOf<"getHealth" | "getMe" | "getOpenApi" | "getOrganization">();
+    expectTypeOf<CoreOperationId>().toEqualTypeOf<keyof operations>();
     expectTypeOf(core.getHealth).returns.resolves.toEqualTypeOf<Health>();
     expectTypeOf(core.getMe).returns.resolves.toEqualTypeOf<Me>();
     expectTypeOf(core.getOrganization).returns.resolves.toEqualTypeOf<Organization>();
     expectTypeOf(core.getOpenApi).returns.resolves.toEqualTypeOf<OpenApiDocument>();
+    expectTypeOf(core.listUnits).returns.resolves.toEqualTypeOf<PaginatedResult<Unit>>();
+    expectTypeOf(core.listUnits).returns.resolves.toEqualTypeOf<{ items: Unit[]; nextCursor: string | null }>();
+    expectTypeOf(core.createUnit).returns.resolves.toEqualTypeOf<Unit>();
+    expectTypeOf(core.revokeAppAccess).returns.resolves.toEqualTypeOf<void>();
+    expectTypeOf(core.deleteRoleAssignment).returns.resolves.toEqualTypeOf<void>();
+    expectTypeOf(core.getProductPermissionSnapshot).returns.resolves.toEqualTypeOf<PermissionSnapshot>();
+
+    expectTypeOf(paginate(core.listUnits)).toEqualTypeOf<AsyncIterableIterator<Unit>>();
+    expectTypeOf(paginate(core.listUnitMembers, { path: { unitId: KRAKOW_UNIT_ID } })).toEqualTypeOf<
+      AsyncIterableIterator<UnitMember>
+    >();
+    expectTypeOf(
+      paginate(core.listProductDirectoryEmployees, {
+        path: { productKey: "timotime" },
+        query: { organizationId: ORG_ID },
+      }),
+    ).toEqualTypeOf<AsyncIterableIterator<DirectoryEmployee>>();
   });
 });
