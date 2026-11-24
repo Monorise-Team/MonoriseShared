@@ -16,6 +16,7 @@ export interface OperationDefinition {
   readonly hasBody: boolean;
   readonly requiresAuth: boolean;
   readonly enveloped: boolean;
+  readonly noContent: boolean;
 }
 
 export const CORE_OPERATIONS = {
@@ -28,6 +29,7 @@ export const CORE_OPERATIONS = {
     hasBody: false,
     requiresAuth: false,
     enveloped: true,
+    noContent: false,
   },
   getMe: {
     operationId: "getMe",
@@ -38,6 +40,7 @@ export const CORE_OPERATIONS = {
     hasBody: false,
     requiresAuth: true,
     enveloped: true,
+    noContent: false,
   },
   getOpenApi: {
     operationId: "getOpenApi",
@@ -48,6 +51,7 @@ export const CORE_OPERATIONS = {
     hasBody: false,
     requiresAuth: false,
     enveloped: false,
+    noContent: false,
   },
   getOrganization: {
     operationId: "getOrganization",
@@ -58,6 +62,7 @@ export const CORE_OPERATIONS = {
     hasBody: false,
     requiresAuth: true,
     enveloped: true,
+    noContent: false,
   },
 } as const satisfies Record<string, OperationDefinition>;
 

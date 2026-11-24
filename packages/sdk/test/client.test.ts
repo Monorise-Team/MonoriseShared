@@ -381,10 +381,60 @@ describe("createCoreClient", () => {
     });
   });
 
-  it("validates baseUrl on client creation", () => {
-    expect(() => createCoreClient({ baseUrl: "not-a-url" })).toThrow(/Invalid Core API baseUrl/);
+  it("throws CoreApiProtocolError when getOpenApi or getMe unexpectedly returns 204 or an empty body", async () => {
+    const fetch204 = vi.fn<FetchFunction>(async () => new Response(null, { status: 204 }));
+    const core204 = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetch204,
+    });
+
+    await expect(core204.getOpenApi()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 204,
+    });
+    await expect(core204.getMe()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 204,
+    });
+
+    const fetchEmpty200 = vi.fn<FetchFunction>(async () => new Response("", { status: 200 }));
+    const coreEmpty = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchEmpty200,
+    });
+
+    await expect(coreEmpty.getOpenApi()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 200,
+    });
+    await expect(coreEmpty.getMe()).rejects.toMatchObject({
+      name: "CoreApiProtocolError",
+      status: 200,
+    });
+  });
+
+  it("validates baseUrl on client creation without leaking credentials or raw input", () => {
+    expect(() => createCoreClient({ baseUrl: "not-a-url" })).toThrow(/^Invalid Core API baseUrl$/);
     expect(() => createCoreClient({ baseUrl: "ftp://api.monorise.studio" })).toThrow(/http or https/);
     expect(() => createCoreClient({ baseUrl: "https://api.monorise.studio?x=1" })).toThrow(/query parameters/);
+
+    for (const badUrl of [
+      "https://user:s3cret@api.monorise.studio",
+      "https://s3cret@api.monorise.studio",
+      "not a url with s3cret",
+    ]) {
+      let caught: unknown;
+      try {
+        createCoreClient({ baseUrl: badUrl });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).not.toContain("s3cret");
+      expect((caught as Error).message).not.toContain("user");
+    }
   });
 
   it("exposes accurate generated TypeScript return types for every Core operation", () => {

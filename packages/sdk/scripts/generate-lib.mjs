@@ -161,6 +161,31 @@ function operationUsesEnvelope(document, operation) {
   return Boolean(properties && "data" in properties && "meta" in properties && "error" in properties);
 }
 
+function operationAllowsNoContent(document, operation) {
+  const responses = operation.responses;
+  if (!responses || typeof responses !== "object") {
+    return false;
+  }
+
+  for (const status of Object.keys(responses)) {
+    if (!/^2\d\d$/.test(status)) {
+      continue;
+    }
+    if (status === "204") {
+      return true;
+    }
+    const response = resolveLocalRef(document, responses[status]);
+    if (!response || typeof response !== "object") {
+      continue;
+    }
+    const content = response.content;
+    if (!content || typeof content !== "object" || Object.keys(content).length === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Extracts a deterministic, sorted list of operations from an OpenAPI 3.1 document.
  */
@@ -204,6 +229,7 @@ export function extractOperations(document) {
         hasBody: operationHasJsonBody(document, operation),
         requiresAuth: operationRequiresAuth(document, operation),
         enveloped: operationUsesEnvelope(document, operation),
+        noContent: operationAllowsNoContent(document, operation),
       });
     }
   }
@@ -227,6 +253,7 @@ function renderOperationsModule(operations) {
       `    hasBody: ${operation.hasBody},`,
       `    requiresAuth: ${operation.requiresAuth},`,
       `    enveloped: ${operation.enveloped},`,
+      `    noContent: ${operation.noContent},`,
       `  },`,
     ];
     return lines.join("\n");
@@ -245,6 +272,7 @@ function renderOperationsModule(operations) {
     "  readonly hasBody: boolean;",
     "  readonly requiresAuth: boolean;",
     "  readonly enveloped: boolean;",
+    "  readonly noContent: boolean;",
     "}",
     "",
     "export const CORE_OPERATIONS = {",

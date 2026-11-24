@@ -195,6 +195,7 @@ const FIXTURE_DEFINITIONS = {
     hasBody: true,
     requiresAuth: true,
     enveloped: true,
+    noContent: false,
   },
   deleteEmployee: {
     operationId: "deleteEmployee",
@@ -205,6 +206,7 @@ const FIXTURE_DEFINITIONS = {
     hasBody: false,
     requiresAuth: true,
     enveloped: false,
+    noContent: true,
   },
   getEmployee: {
     operationId: "getEmployee",
@@ -215,6 +217,7 @@ const FIXTURE_DEFINITIONS = {
     hasBody: false,
     requiresAuth: true,
     enveloped: true,
+    noContent: false,
   },
   listEmployees: {
     operationId: "listEmployees",
@@ -225,6 +228,7 @@ const FIXTURE_DEFINITIONS = {
     hasBody: false,
     requiresAuth: true,
     enveloped: true,
+    noContent: false,
   },
 } as const satisfies Record<string, OperationDefinition>;
 
@@ -345,5 +349,6 @@ describe("generated operations with path, query, and body parameters", () => {
       firstName: string;
     }>();
     expectTypeOf(client.listEmployees).returns.resolves.toEqualTypeOf<Array<{ id: string; firstName: string }>>();
+    expectTypeOf(client.deleteEmployee).returns.resolves.toEqualTypeOf<void>();
   });
 });

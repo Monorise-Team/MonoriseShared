@@ -94,10 +94,11 @@ type UnwrapEnvelope<Payload, Enveloped extends boolean> = Enveloped extends true
     : Payload
   : Payload;
 
-export type OperationResult<Op, Def extends OperationDefinition> = UnwrapEnvelope<
-  SuccessJsonPayload<Op>,
-  Def["enveloped"]
->;
+export type OperationResult<Op, Def extends OperationDefinition> = Def["noContent"] extends true
+  ? SuccessJsonPayload<Op> extends void
+    ? void
+    : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"]> | undefined
+  : UnwrapEnvelope<SuccessJsonPayload<Op>, Def["enveloped"]>;
 
 type OperationMethod<Op, Def extends OperationDefinition> =
   HasRequiredKeys<OperationInput<Op>> extends true
@@ -129,10 +130,13 @@ function normalizeBaseUrl(baseUrl: string): string {
   try {
     parsed = new URL(baseUrl);
   } catch (cause) {
-    throw new Error(`Invalid Core API baseUrl: "${baseUrl}"`, { cause });
+    throw new Error("Invalid Core API baseUrl", { cause });
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("Core API baseUrl must use http or https protocol");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("Core API baseUrl must not include credentials");
   }
   if (parsed.search || parsed.hash) {
     throw new Error("Core API baseUrl must not contain query parameters or a hash");
@@ -292,13 +296,30 @@ async function executeOperation(
     );
   }
 
-  if (response.status === 204 && !operation.enveloped) {
+  if (response.status === 204) {
+    if (!operation.noContent) {
+      throw new CoreApiProtocolError(
+        `Core API returned unexpected 204 No Content for ${operation.method} ${operation.path}`,
+        { status: response.status },
+      );
+    }
     return undefined;
+  }
+
+  const rawBody = await response.text();
+  if (rawBody.trim().length === 0) {
+    if (response.ok && operation.noContent) {
+      return undefined;
+    }
+    throw new CoreApiProtocolError(
+      `Core API returned an empty response body for ${operation.method} ${operation.path} (status ${response.status})`,
+      { status: response.status },
+    );
   }
 
   let payload: unknown;
   try {
-    payload = await response.json();
+    payload = JSON.parse(rawBody);
   } catch (cause) {
     throw new CoreApiProtocolError(
       `Core API returned invalid JSON for ${operation.method} ${operation.path} (status ${response.status})`,
