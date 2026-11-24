@@ -1,0 +1,43 @@
+{
+  "name": "@monorise-team/sdk",
+  "version": "0.0.0",
+  "description": "Typowany klient Core API Monorise generowany z opisu OpenAPI",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Monorise-Team/MonoriseShared.git",
+    "directory": "packages/sdk"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "generate": "node scripts/generate.mjs",
+    "sync": "node scripts/sync.mjs",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@monorise-team/config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "eslint": "^10.15.0",
+    "openapi-typescript": "^7.6.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  }
+}

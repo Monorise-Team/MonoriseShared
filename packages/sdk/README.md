@@ -1,0 +1,93 @@
+# @monorise-team/sdk
+
+Typowany klient Core API Monorise generowany z opisu OpenAPI (`openapi/core-api.json` z repozytorium MonoriseCore). Produkty webowe, desktopowe (Tauri) i mobilne (Expo) wywołują Core wyłącznie przez tę bibliotekę. Klient używa wyłącznie standardowego `fetch`, bez zależności od Node.js.
+
+Biblioteka podąża ściśle za opisem Core API: zawiera tylko te typy i metody, które istnieją w kodzie MonoriseCore. Nie dodaje własnych endpointów ani nie obsługuje logowania ani odświeżania tokenów (tym zajmuje się `@monorise-team/auth`).
+
+## Przykład: dane zalogowanego konta i firmy
+
+AvenMail pokazuje Annie z firmy Acme jej imię i nazwę firmy. Wywołuje `core.getMe()` z tokenem Anny i dostaje gotowe, typowane dane — bez ręcznego rozpakowywania koperty `{ data, meta, error }`:
+
+```ts
+import { createCoreClient } from "@monorise-team/sdk";
+
+const core = createCoreClient({
+  baseUrl: "https://api.monorise.studio",
+  getAccessToken: () => session.accessToken,
+});
+
+const me = await core.getMe();
+console.log(me.employee.firstName); // "Anna"
+console.log(me.organization.name); // "Acme"
+```
+
+Adres `baseUrl` wskazuje serwer (np. `http://localhost:3200` lokalnie albo `https://api.monorise.studio` produkcyjnie) — ścieżki operacji zawierają już `/core/v1`.
+
+Operacje publiczne (`getHealth()`, `getOpenApi()`) nigdy nie wywołują `getAccessToken` ani nie wysyłają nagłówka `Authorization`. Operacja wymagająca tokenu (`getMe()`, `getOrganization()`) rzuca `CoreApiMissingTokenError` jeszcze przed wysłaniem żądania, gdy tokenu brakuje. `getOpenApi()` zwraca surowy dokument OpenAPI (zgodnie ze specyfikacją nie jest owinięty w kopertę).
+
+## Obsługa błędów
+
+Klient rozróżnia błędy zwrócone przez Core, błędy połączenia i niezgodność odpowiedzi z kontraktem:
+
+```ts
+import {
+  CoreApiError,
+  CoreApiMissingTokenError,
+  CoreApiProtocolError,
+  CoreApiUnavailableError,
+} from "@monorise-team/sdk";
+
+try {
+  const me = await core.getMe();
+  return me;
+} catch (error) {
+  if (error instanceof CoreApiError) {
+    // Błąd w kopercie Core: np. error.code === "UNAUTHENTICATED" lub "ACCOUNT_DEACTIVATED"
+    // Dostępne pola: error.status, error.code, error.message, error.details, error.requestId
+    if (error.code === "ACCOUNT_DEACTIVATED") {
+      return { reason: "deactivated", requestId: error.requestId };
+    }
+    throw error;
+  }
+  if (error instanceof CoreApiUnavailableError) {
+    // Brak połączenia z Core (błąd sieci, DNS, przerwane żądanie) — nie wylogowuj użytkownika
+    return { reason: "unavailable" };
+  }
+  if (error instanceof CoreApiProtocolError) {
+    // Odpowiedź niezgodna z opisem OpenAPI (np. HTML z bramki zamiast JSON lub brak koperty)
+    throw error;
+  }
+  if (error instanceof CoreApiMissingTokenError) {
+    // Wywołano operację chronioną bez tokenu dostępu
+    throw error;
+  }
+  throw error;
+}
+```
+
+Komunikaty błędów są po angielsku i nigdy nie zawierają tokenu dostępu.
+
+## Aktualizacja po zmianach w Core API
+
+Lokalna kopia opisu znajduje się w `packages/sdk/openapi/core-api.json`, a pliki generowane (`src/generated/`) są zatwierdzane w repozytorium. Zwykły build i `pnpm check` nie łączą się z siecią — testy sprawdzają jedynie, czy `src/generated/` zgadza się z lokalną kopią.
+
+Gdy w MonoriseCore pojawi się nowy endpoint lub zmieni się schemat:
+
+```bash
+# Pobiera opis z gałęzi dev MonoriseCore i generuje typy oraz tabelę operacji:
+pnpm --filter @monorise-team/sdk sync
+
+# Albo z gałęzi prod:
+pnpm --filter @monorise-team/sdk sync -- --ref prod
+
+# Regeneracja tylko z lokalnej kopii (bez sieci):
+pnpm --filter @monorise-team/sdk generate
+```
+
+Nie edytuj plików w `src/generated/` ręcznie — każda zmiana musi pochodzić z `openapi/core-api.json`.
+
+## Poza zakresem tej paczki
+
+- Logowanie, OAuth 2.1, sesje BFF i odświeżanie tokenów (`@monorise-team/auth`).
+- Nowe endpointy Core (dodawane najpierw w MonoriseCore, potem synchronizowane przez `sync`).
+- Testy zgodności produktów (`@monorise-team/testing`).

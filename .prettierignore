@@ -7,3 +7,5 @@ CHANGELOG.md
 LICENSE
 .github/ISSUE_TEMPLATE/
 .github/pull_request_template.md
+packages/sdk/openapi/core-api.json
+packages/sdk/src/generated/
