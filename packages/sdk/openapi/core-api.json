@@ -3,8 +3,8 @@
   "info": {
     "title": "Monorise Core API",
     "version": "0.0.0",
-    "summary": "Core API platformy Monorise: tożsamość, firma i stan usługi.",
-    "description": "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /core/v1/openapi.json`, który zwraca czysty dokument OpenAPI JSON. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
+    "summary": "Core API platformy Monorise: tożsamość, firma, pracownicy, struktura, role, uprawnienia i stan usługi.",
+    "description": "Opis Core API wygenerowany automatycznie z kodu (katalog ścieżek i schematy Zod) i źródło prawdy dla generowanego klienta `@monorise-team/sdk`. Wszystkie odpowiedzi ustawiają nagłówek `Cache-Control: no-store` i używają koperty `{ data, meta, error }` (ADR-0044), z wyjątkiem `GET /core/v1/openapi.json`, który zwraca czysty dokument OpenAPI JSON, oraz odpowiedzi `204 No Content`. Nieznane ścieżki zwracają status `404` z kodem `NOT_FOUND` w kopercie błędu.",
     "license": {
       "name": "Proprietary, all rights reserved",
       "identifier": "LicenseRef-Proprietary"
@@ -31,10 +31,580 @@
     },
     {
       "name": "Organization",
-      "description": "Firma zalogowanego użytkownika."
+      "description": "Firma zalogowanego użytkownika oraz przekazanie roli Ownera."
+    },
+    {
+      "name": "Structure",
+      "description": "Jednostki organizacyjne (oddziały, działy, zespoły) i ich członkowie."
+    },
+    {
+      "name": "Permissions",
+      "description": "Rejestr uprawnień oraz migawka uprawnień dla produktów (ADR-0036)."
+    },
+    {
+      "name": "Roles",
+      "description": "Role firmowe, gotowe szablony ról i przypisania ról z zakresem (ADR-0033, ADR-0035)."
+    },
+    {
+      "name": "AppAccess",
+      "description": "Dostęp firm do produktów (Entitlements) oraz włączanie aplikacji pracownikom (AppAccess, ADR-0035)."
+    },
+    {
+      "name": "Directory",
+      "description": "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy)."
     }
   ],
   "paths": {
+    "/core/v1/app-access": {
+      "get": {
+        "tags": [
+          "AppAccess"
+        ],
+        "operationId": "listAppAccess",
+        "summary": "Lista wpisów dostępu kont do aplikacji",
+        "description": "Owner oraz konta z uprawnieniem `core.app_access.manage` (w dowolnym zakresie) widzą wszystkie wpisy firmy; pozostałe aktywne konta widzą wyłącznie własne wpisy. Domyślnie zwraca tylko aktywne dostępy.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po identyfikatorze konta (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po kluczu produktu (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "includeRevoked",
+            "in": "query",
+            "required": false,
+            "description": "Czy uwzględnić wyłączone dostępy (`REVOKED`) — domyślnie `false`.",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy dostępów kont do aplikacji.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAccessListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AppAccess"
+        ],
+        "operationId": "grantAppAccess",
+        "summary": "Włącz aplikację pracownikowi",
+        "description": "Włącza aktywnemu kontu dostęp do produktu, do którego firma ma aktywny `Entitlement` (ADR-0035). Wymaga roli Ownera albo uprawnienia `core.app_access.manage` obejmującego jednostki pracownika (dla pracownika bez jednostek — w zakresie całej firmy).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Identyfikator konta i klucz produktu.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAppAccess"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Utworzony wpis dostępu konta do aplikacji.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/app-access/{appAccessId}": {
+      "delete": {
+        "tags": [
+          "AppAccess"
+        ],
+        "operationId": "revokeAppAccess",
+        "summary": "Wyłącz aplikację pracownikowi",
+        "description": "Oznacza dostęp konta do aplikacji jako `REVOKED` (z zachowaniem historii), podbija `authzRevision` i zapisuje zdarzenie `organization.permissions.changed`. Wymaga roli Ownera albo `core.app_access.manage` obejmującego jednostki pracownika.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "appAccessId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator wpisu dostępu konta do aplikacji (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Dostęp konta do aplikacji został wyłączony."
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/employees": {
+      "get": {
+        "tags": [
+          "People"
+        ],
+        "operationId": "listEmployees",
+        "summary": "Lista pracowników firmy",
+        "description": "Zwraca stronicowaną listę pracowników firmy wynikającej z tokenu dostępu (kolejność utworzenia).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy pracowników firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "People"
+        ],
+        "operationId": "createEmployee",
+        "summary": "Dodaj pracownika",
+        "description": "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Dane nowego pracownika.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEmployee"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Utworzony pracownik.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/entitlements": {
+      "get": {
+        "tags": [
+          "AppAccess"
+        ],
+        "operationId": "listEntitlements",
+        "summary": "Lista dostępów firmy do produktów",
+        "description": "Zwraca stronicowaną, wyłącznie do odczytu listę dostępów firmy do produktów (Entitlements), dostępną dla każdego aktywnego konta firmy.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr statusu dostępu (`ACTIVE`, `SUSPENDED` albo `ENDED`).",
+            "schema": {
+              "$ref": "#/components/schemas/EntitlementStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy dostępów firmy do produktów.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitlementListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/core/v1/health": {
       "get": {
         "tags": [
@@ -74,7 +644,7 @@
         ],
         "operationId": "getMe",
         "summary": "Pobierz dane zalogowanego konta, pracownika i firmy",
-        "description": "Zwraca konto, przypisanego pracownika oraz skrócone dane firmy wynikające z tokenu dostępu.",
+        "description": "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
         "security": [
           {
             "bearerAuth": []
@@ -192,6 +762,2182 @@
           }
         }
       }
+    },
+    "/core/v1/organization/owner": {
+      "put": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "transferOrganizationOwner",
+        "summary": "Przekaż rolę Ownera firmy innemu aktywnemu kontu",
+        "description": "Operacja wyłącznie dla bieżącego Ownera firmy. Docelowe konto musi być aktywnym kontem tej samej firmy i nie może być już Ownerem. Poprzedni Owner zachowuje wyłącznie uprawnienia wynikające z nadanych ról.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Identyfikator docelowego konta nowego Ownera.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferOrganizationOwner"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Identyfikator nowego Ownera firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationOwnerResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/permissions": {
+      "get": {
+        "tags": [
+          "Permissions"
+        ],
+        "operationId": "listPermissions",
+        "summary": "Lista zarejestrowanych uprawnień",
+        "description": "Zwraca stronicowaną listę uprawnień platformy i produktów. Domyślnie pomija wycofane uprawnienia; dostępna dla każdego aktywnego konta firmy.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po kluczu produktu (np. `timotime`) albo `core` dla uprawnień platformy.",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "includeDeprecated",
+            "in": "query",
+            "required": false,
+            "description": "Czy uwzględnić wycofane uprawnienia (domyślnie `false`).",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy zarejestrowanych uprawnień.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/products/{productKey}/directory/employees": {
+      "get": {
+        "tags": [
+          "Directory"
+        ],
+        "operationId": "listProductDirectoryEmployees",
+        "summary": "Lista podstawowych danych pracowników dla serwera produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne (bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+        "security": [
+          {
+            "productOAuth": [
+              "core:directory.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": true,
+            "description": "Identyfikator firmy (UUID v7), dla której pobierani są pracownicy.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "employeeId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny powtarzalny filtr po identyfikatorach pracowników (maks. 100; brak = wszyscy pracownicy firmy).",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy podstawowych danych pracowników firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryEmployeeListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/products/{productKey}/directory/unit-members": {
+      "get": {
+        "tags": [
+          "Directory"
+        ],
+        "operationId": "listProductDirectoryUnitMembers",
+        "summary": "Lista członkostw pracowników w jednostkach dla serwera produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
+        "security": [
+          {
+            "productOAuth": [
+              "core:directory.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": true,
+            "description": "Identyfikator firmy (UUID v7), dla której pobierane są członkostwa.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "unitId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny powtarzalny filtr po identyfikatorach jednostek (maks. 100; brak = wszystkie jednostki firmy).",
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy członkostw pracowników w jednostkach firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryUnitMemberListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/products/{productKey}/permission-snapshot": {
+      "get": {
+        "tags": [
+          "Permissions"
+        ],
+        "operationId": "getProductPermissionSnapshot",
+        "summary": "Pobierz migawkę uprawnień konta dla produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:permissions.read`). Zwraca migawkę uprawnień zgodną ze schematem `permissionSnapshotSchema` z `@monorise-team/permissions`: aktywność produktu dla firmy i konta, wyłącznie nadania uprawnień tego produktu (nigdy `core.*`) oraz pełne drzewo jednostek firmy (łącznie z `ARCHIVED`).",
+        "security": [
+          {
+            "productOAuth": [
+              "core:permissions.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": true,
+            "description": "Identyfikator firmy (UUID v7), w której kontekście pobierana jest migawka.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": true,
+            "description": "Identyfikator konta pracownika (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Migawka uprawnień konta dla wskazanego produktu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionSnapshotResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/products/{productKey}/permissions": {
+      "put": {
+        "tags": [
+          "Permissions"
+        ],
+        "operationId": "registerProductPermissions",
+        "summary": "Zarejestruj manifest uprawnień produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:permissions.register`). Idempotentnie dodaje i aktualizuje uprawnienia produktu oraz oznacza brakujące jako wycofane (bez usuwania).",
+        "security": [
+          {
+            "productOAuth": [
+              "core:permissions.register"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Manifest uprawnień produktu (1–500 pozycji z prefiksem `<productKey>.`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterPermissionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Podsumowanie zmian w rejestrze uprawnień produktu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterPermissionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/products/{productKey}/role-templates": {
+      "put": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "registerProductRoleTemplates",
+        "summary": "Zarejestruj gotowe role (szablony) produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:permissions.register`). Idempotentnie dodaje i aktualizuje szablony ról produktu, archiwizuje brakujące i przywraca ponownie obecne.",
+        "security": [
+          {
+            "productOAuth": [
+              "core:permissions.register"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Manifest gotowych ról produktu (klucze z prefiksem `<productKey>.`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRoleTemplatesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Podsumowanie zmian w gotowych rolach produktu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterRoleTemplatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/role-assignments": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "listRoleAssignments",
+        "summary": "Lista przypisań ról w firmie",
+        "description": "Owner oraz konta z uprawnieniem `core.roles.assign` lub `core.roles.manage` (w dowolnym zakresie) widzą wszystkie przypisania firmy; pozostałe konta widzą wyłącznie własne przypisania.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po identyfikatorze konta (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "roleId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po identyfikatorze roli (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy przypisań ról.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleAssignmentListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "createRoleAssignment",
+        "summary": "Nadaj rolę kontu w firmie z zakresem i opcjonalnym terminem",
+        "description": "Przypisuje aktywną rolę (firmową albo gotowy szablon) kontu w zakresie `ORGANIZATION`, `UNIT` lub `RESOURCE`. Wymaga roli Ownera albo `core.roles.assign` obejmującego docelowy zakres oraz posiadania każdego uprawnienia roli w tym zakresie (ADR-0035).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Dane nowego przypisania roli.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Utworzone przypisanie roli.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleAssignmentResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/role-assignments/{assignmentId}": {
+      "delete": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "deleteRoleAssignment",
+        "summary": "Odbierz przypisanie roli",
+        "description": "Usuwa przypisanie roli i podbija `authzRevision` konta (historia trafia do dziennika zdarzeń). Wymaga tych samych uprawnień co nadanie tego przypisania albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator przypisania roli (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Przypisanie roli zostało odebrane."
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/roles": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "listRoles",
+        "summary": "Lista ról firmy i gotowych szablonów",
+        "description": "Zwraca stronicowaną listę ról firmy wraz z gotowymi szablonami (domyślnie bez ról zarchiwizowanych). Dostępna dla każdego aktywnego konta firmy.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "product",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po kluczu produktu (np. `timotime`) albo `core` dla ról platformowych.",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "includeTemplates",
+            "in": "query",
+            "required": false,
+            "description": "Czy uwzględnić gotowe role (szablony) — domyślnie `true`.",
+            "schema": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "includeArchived",
+            "in": "query",
+            "required": false,
+            "description": "Czy uwzględnić zarchiwizowane role — domyślnie `false`.",
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy ról.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "createRole",
+        "summary": "Utwórz rolę firmy lub skopiuj istniejącą rolę",
+        "description": "Tworzy własną rolę firmy od zera albo kopiuje gotowy szablon lub istniejącą rolę firmy (`copyFromRoleId`). Wymaga uprawnienia `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Dane nowej roli firmy albo identyfikator kopiowanej roli.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Utworzona rola firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/roles/{roleId}": {
+      "get": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "getRole",
+        "summary": "Pobierz szczegóły roli wraz z kluczami uprawnień",
+        "description": "Zwraca rolę firmy albo gotowy szablon roli wraz z listą jej kluczy uprawnień.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator roli lub gotowego szablonu roli (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Szczegóły roli.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "updateRole",
+        "summary": "Zmień nazwę, opis lub uprawnienia roli firmy",
+        "description": "Aktualizuje aktywną rolę firmy (szablony zwracają `403`). Zmiana listy uprawnień podbija `authzRevision` wszystkich kont z przypisaną tą rolą. Wymaga `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator roli lub gotowego szablonu roli (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Pola roli firmy do aktualizacji.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRole"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowana rola firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Roles"
+        ],
+        "operationId": "archiveRole",
+        "summary": "Zarchiwizuj rolę firmy",
+        "description": "Archiwizuje rolę firmy (ustawia `archivedAt`). Zwraca `409 CONFLICT`, dopóki rola ma jakiekolwiek przypisania, oraz `403` dla szablonów. Wymaga `core.roles.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "roleId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator roli lub gotowego szablonu roli (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Rola firmy została zarchiwizowana."
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/units": {
+      "get": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "listUnits",
+        "summary": "Lista jednostek organizacyjnych firmy",
+        "description": "Zwraca stronicowaną, płaską listę jednostek organizacyjnych z polem `parentId`, opcjonalnie filtrowaną statusem.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr statusu jednostki (`ACTIVE` albo `ARCHIVED`).",
+            "schema": {
+              "$ref": "#/components/schemas/UnitStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy jednostek organizacyjnych firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "createUnit",
+        "summary": "Utwórz jednostkę organizacyjną",
+        "description": "Dodaje oddział, dział lub zespół do drzewa struktury firmy (ADR-0032). Wymaga uprawnienia `core.structure.manage` na jednostce nadrzędnej (albo w zakresie całej firmy dla jednostki głównej) lub roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Dane nowej jednostki organizacyjnej.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUnit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Utworzona jednostka organizacyjna.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/units/{unitId}": {
+      "patch": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "updateUnit",
+        "summary": "Zmień jednostkę organizacyjną",
+        "description": "Zmienia nazwę, przenosi jednostkę w drzewie (z kontrolą cykli) albo zmienia jej status (archiwizacja tylko bez aktywnych jednostek podrzędnych). Wymaga uprawnienia `core.structure.manage` na jednostce oraz — przy przenoszeniu — również na nowej jednostce nadrzędnej (lub całej firmie).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator jednostki organizacyjnej (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Pola jednostki organizacyjnej do aktualizacji.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUnit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowana jednostka organizacyjna.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/units/{unitId}/members": {
+      "get": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "listUnitMembers",
+        "summary": "Lista członków jednostki organizacyjnej",
+        "description": "Zwraca stronicowaną listę pracowników przypisanych do wskazanej jednostki organizacyjnej wraz z ich rolą.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator jednostki organizacyjnej (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona listy członków jednostki organizacyjnej.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitMemberListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/units/{unitId}/members/{employeeId}": {
+      "put": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "putUnitMember",
+        "summary": "Przypisz pracownika do jednostki lub zmień jego rolę",
+        "description": "Operacja idempotentna: przypisuje pracownika do jednostki albo aktualizuje jego rolę (`MEMBER`/`LEADER`). Wymaga uprawnienia `core.structure.manage` na wskazanej jednostce albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator jednostki organizacyjnej (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "employeeId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator pracownika (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Rola pracownika w jednostce.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutUnitMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zapisane członkostwo pracownika w jednostce.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitMemberResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Structure"
+        ],
+        "operationId": "deleteUnitMember",
+        "summary": "Usuń pracownika z jednostki organizacyjnej",
+        "description": "Usuwa przypisanie pracownika do wskazanej jednostki. Wymaga uprawnienia `core.structure.manage` na tej jednostce albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "unitId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator jednostki organizacyjnej (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "employeeId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator pracownika (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Członkostwo pracownika w jednostce zostało usunięte."
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -201,9 +2947,31 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Token dostępu JWT (EdDSA) z auth.monorise.studio, ważny 5 minut (ADR-0023)."
+      },
+      "productOAuth": {
+        "type": "oauth2",
+        "description": "Token maszynowy OAuth 2.1 (client_credentials, JWT EdDSA) wydany dla poufnego klienta produktu.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://auth.monorise.studio/api/auth/oauth2/token",
+            "scopes": {
+              "core:permissions.register": "Rejestracja manifestu uprawnień i gotowych ról produktu w Core.",
+              "core:permissions.read": "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
+              "core:directory.read": "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu."
+            }
+          }
+        }
       }
     },
     "schemas": {
+      "AccountStatus": {
+        "type": "string",
+        "enum": [
+          "INVITED",
+          "ACTIVE",
+          "DEACTIVATED"
+        ]
+      },
       "ApiErrorBody": {
         "type": "object",
         "properties": {
@@ -262,6 +3030,25 @@
         ],
         "additionalProperties": false
       },
+      "ApiListMeta": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
       "ApiMeta": {
         "type": "object",
         "properties": {
@@ -271,6 +3058,459 @@
         },
         "required": [
           "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "AppAccess": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ProductKey"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AppAccessStatus"
+          },
+          "grantedByAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "product",
+          "status",
+          "grantedByAccountId",
+          "createdAt",
+          "revokedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AppAccessList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/AppAccess"
+        }
+      },
+      "AppAccessListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppAccessList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "AppAccessResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppAccess"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "AppAccessStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "REVOKED"
+        ]
+      },
+      "CopyRole": {
+        "type": "object",
+        "properties": {
+          "copyFromRoleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "copyFromRoleId"
+        ],
+        "additionalProperties": false
+      },
+      "CreateAppAccess": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ProductKey"
+          }
+        },
+        "required": [
+          "accountId",
+          "product"
+        ],
+        "additionalProperties": false
+      },
+      "CreateEmployee": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "workEmail": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "jobTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName"
+        ],
+        "additionalProperties": false
+      },
+      "CreateRole": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CreateRoleFromScratch"
+          },
+          {
+            "$ref": "#/components/schemas/CopyRole"
+          }
+        ]
+      },
+      "CreateRoleAssignment": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "scopeType": {
+            "$ref": "#/components/schemas/ScopeType"
+          },
+          "scopeId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validFrom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "accountId",
+          "roleId",
+          "scopeType"
+        ],
+        "additionalProperties": false
+      },
+      "CreateRoleFromScratch": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissions": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "product",
+          "permissions"
+        ],
+        "additionalProperties": false
+      },
+      "CreateUnit": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "type": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryEmployee": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmployeeStatus"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "firstName",
+          "lastName",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryEmployeeList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/DirectoryEmployee"
+        }
+      },
+      "DirectoryEmployeeListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DirectoryEmployeeList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryUnitMember": {
+        "type": "object",
+        "properties": {
+          "unitId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/UnitMembershipRole"
+          }
+        },
+        "required": [
+          "unitId",
+          "employeeId",
+          "accountId",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryUnitMemberList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/DirectoryUnitMember"
+        }
+      },
+      "DirectoryUnitMemberListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DirectoryUnitMemberList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
         ],
         "additionalProperties": false
       },
@@ -291,6 +3531,18 @@
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "firstName": {
             "type": "string"
           },
@@ -310,16 +3562,12 @@
             ]
           },
           "status": {
-            "type": "string",
-            "enum": [
-              "ACTIVE",
-              "FORMER",
-              "ANONYMIZED"
-            ]
+            "$ref": "#/components/schemas/EmployeeStatus"
           }
         },
         "required": [
           "id",
+          "accountId",
           "firstName",
           "lastName",
           "workEmail",
@@ -327,6 +3575,184 @@
           "status"
         ],
         "additionalProperties": false
+      },
+      "EmployeeList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Employee"
+        }
+      },
+      "EmployeeListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EmployeeList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "EmployeeResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Employee"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "EmployeeStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "FORMER",
+          "ANONYMIZED"
+        ]
+      },
+      "Entitlement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "product": {
+            "$ref": "#/components/schemas/ProductKey"
+          },
+          "planId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceType": {
+            "$ref": "#/components/schemas/EntitlementSourceType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EntitlementStatus"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "suspendedReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitlementSuspendedReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "product",
+          "planId",
+          "sourceType",
+          "status",
+          "isActive",
+          "startsAt",
+          "endsAt",
+          "suspendedReason",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "EntitlementList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Entitlement"
+        }
+      },
+      "EntitlementListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EntitlementList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "EntitlementSourceType": {
+        "type": "string",
+        "enum": [
+          "CONTRACT",
+          "SUBSCRIPTION",
+          "TRIAL",
+          "MANUAL",
+          "OFFER",
+          "PACKAGE"
+        ]
+      },
+      "EntitlementStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "SUSPENDED",
+          "ENDED"
+        ]
+      },
+      "EntitlementSuspendedReason": {
+        "type": "string",
+        "enum": [
+          "OVERDUE"
+        ]
       },
       "ErrorCode": {
         "type": "string",
@@ -342,6 +3768,60 @@
           "ORGANIZATION_NOT_ACTIVE",
           "ACCOUNT_DEACTIVATED",
           "INTERNAL"
+        ]
+      },
+      "GrantScope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "ORGANIZATION"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "UNIT"
+              },
+              "unitId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "type",
+              "unitId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "RESOURCE"
+              },
+              "resourceId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "type",
+              "resourceId"
+            ],
+            "additionalProperties": false
+          }
         ]
       },
       "Health": {
@@ -392,18 +3872,17 @@
                 "type": "string"
               },
               "status": {
-                "type": "string",
-                "enum": [
-                  "INVITED",
-                  "ACTIVE",
-                  "DEACTIVATED"
-                ]
+                "$ref": "#/components/schemas/AccountStatus"
+              },
+              "isOwner": {
+                "type": "boolean"
               }
             },
             "required": [
               "id",
               "email",
-              "status"
+              "status",
+              "isOwner"
             ],
             "additionalProperties": false
           },
@@ -557,6 +4036,40 @@
         ],
         "additionalProperties": false
       },
+      "OrganizationOwner": {
+        "type": "object",
+        "properties": {
+          "ownerAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "ownerAccountId"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationOwnerResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OrganizationOwner"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
       "OrganizationResponse": {
         "type": "object",
         "properties": {
@@ -586,6 +4099,921 @@
           "OFFBOARDING",
           "DELETED"
         ]
+      },
+      "Permission": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "deprecated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "product",
+          "description",
+          "deprecated"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionGrant": {
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GrantScope"
+          },
+          "validFrom": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validUntil": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "permission",
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Permission"
+        }
+      },
+      "PermissionListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PermissionList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionManifestEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "key",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionSnapshot": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "authzRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "isOwner": {
+            "type": "boolean"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionGrant"
+            }
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SnapshotUnit"
+            }
+          }
+        },
+        "required": [
+          "accountId",
+          "organizationId",
+          "authzRevision",
+          "isOwner",
+          "products",
+          "grants",
+          "units"
+        ],
+        "additionalProperties": false
+      },
+      "PermissionSnapshotResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PermissionSnapshot"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "ProductKey": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*$"
+      },
+      "PutUnitMember": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "$ref": "#/components/schemas/UnitMembershipRole"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterPermissionsRequest": {
+        "minItems": 1,
+        "maxItems": 500,
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PermissionManifestEntry"
+        }
+      },
+      "RegisterPermissionsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RegisterPermissionsResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterPermissionsResult": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deprecated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "added",
+          "updated",
+          "deprecated",
+          "restored",
+          "unchanged"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterRoleTemplatesRequest": {
+        "maxItems": 100,
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoleTemplateManifestEntry"
+        }
+      },
+      "RegisterRoleTemplatesResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RegisterRoleTemplatesResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RegisterRoleTemplatesResult": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restored": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "added",
+          "updated",
+          "archived",
+          "restored",
+          "unchanged"
+        ],
+        "additionalProperties": false
+      },
+      "Role": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isTemplate": {
+            "type": "boolean"
+          },
+          "copiedFromRoleId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "product",
+          "name",
+          "description",
+          "isTemplate",
+          "copiedFromRoleId",
+          "archivedAt",
+          "permissions",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoleAssignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "roleId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "scopeType": {
+            "$ref": "#/components/schemas/ScopeType"
+          },
+          "scopeId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grantedByAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "roleId",
+          "scopeType",
+          "scopeId",
+          "validFrom",
+          "validUntil",
+          "grantedByAccountId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "RoleAssignmentList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoleAssignment"
+        }
+      },
+      "RoleAssignmentListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RoleAssignmentList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RoleAssignmentResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RoleAssignment"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RoleList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Role"
+        }
+      },
+      "RoleListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RoleList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "RoleTemplateKey": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+$"
+      },
+      "RoleTemplateManifestEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/RoleTemplateKey"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissions": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "permissions"
+        ],
+        "additionalProperties": false
+      },
+      "ScopeType": {
+        "type": "string",
+        "enum": [
+          "ORGANIZATION",
+          "UNIT",
+          "RESOURCE"
+        ]
+      },
+      "SnapshotUnit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "parentId"
+        ],
+        "additionalProperties": false
+      },
+      "TransferOrganizationOwner": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "accountId"
+        ],
+        "additionalProperties": false
+      },
+      "Unit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/UnitType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UnitStatus"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parentId",
+          "name",
+          "type",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "UnitList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Unit"
+        }
+      },
+      "UnitListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UnitList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UnitMember": {
+        "type": "object",
+        "properties": {
+          "unitId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UnitMembershipRole"
+          },
+          "joinedAt": {
+            "type": "string"
+          },
+          "employee": {
+            "$ref": "#/components/schemas/Employee"
+          }
+        },
+        "required": [
+          "unitId",
+          "employeeId",
+          "role",
+          "joinedAt",
+          "employee"
+        ],
+        "additionalProperties": false
+      },
+      "UnitMemberList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/UnitMember"
+        }
+      },
+      "UnitMemberListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UnitMemberList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UnitMemberResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UnitMember"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UnitMembershipRole": {
+        "type": "string",
+        "enum": [
+          "MEMBER",
+          "LEADER"
+        ]
+      },
+      "UnitResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UnitStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "ARCHIVED"
+        ]
+      },
+      "UnitType": {
+        "type": "string",
+        "enum": [
+          "BRANCH",
+          "DEPARTMENT",
+          "TEAM"
+        ]
+      },
+      "UpdateRole": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissions": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*){2,}$"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateUnit": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/UnitStatus"
+          }
+        },
+        "additionalProperties": false
       }
     }
   }
