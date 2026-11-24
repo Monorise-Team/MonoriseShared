@@ -2,7 +2,7 @@
   "name": "monorise-shared",
   "version": "0.0.0",
   "private": true,
-  "description": "Wspólne biblioteki Monorise: @monorise-team/tokens, ui, config, auth i events",
+  "description": "Wspólne biblioteki Monorise: @monorise-team/tokens, ui, config, auth, permissions i events",
   "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@11.5.0",

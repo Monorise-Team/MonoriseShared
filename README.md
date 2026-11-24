@@ -2,14 +2,15 @@
 
 Wspólne biblioteki Monorise publikowane w GitHub Packages pod nazwą `@monorise-team/*` (ADR-0087). Wszystkie paczki mają zawsze tę samą wersję.
 
-| Paczka                                     | Co                                                                                                                            |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| [`@monorise-team/tokens`](packages/tokens) | tokeny wyglądu „Moonlight glass” z desktopowego Aven: CSS dla przeglądarki i komputera, wartości dla Expo                     |
-| [`@monorise-team/ui`](packages/ui)         | komponenty React na Radix w tym wyglądzie (przyciski, pola, okna, menu, karty, pasek boczny, listy)                           |
-| [`@monorise-team/config`](packages/config) | ESLint, Prettier, TypeScript i commitlint                                                                                     |
-| [`@monorise-team/auth`](packages/auth)     | logowanie produktów przez MonoriseCore: sprawdzanie tokenów, OAuth 2.1 z PKCE, sesje BFF w Next.js, wtyczka Fastify           |
-| [`@monorise-team/events`](packages/events) | zdarzenia między usługami: koperta komunikatu, definicje i katalog, outbox, odbiorca odporny na duplikaty i zmianę kolejności |
-| [`apps/playground`](apps/playground)       | katalog komponentów (nie jest publikowany)                                                                                    |
+| Paczka                                               | Co                                                                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| [`@monorise-team/tokens`](packages/tokens)           | tokeny wyglądu „Moonlight glass” z desktopowego Aven: CSS dla przeglądarki i komputera, wartości dla Expo                     |
+| [`@monorise-team/ui`](packages/ui)                   | komponenty React na Radix w tym wyglądzie (przyciski, pola, okna, menu, karty, pasek boczny, listy)                           |
+| [`@monorise-team/config`](packages/config)           | ESLint, Prettier, TypeScript i commitlint                                                                                     |
+| [`@monorise-team/auth`](packages/auth)               | logowanie produktów przez MonoriseCore: sprawdzanie tokenów, OAuth 2.1 z PKCE, sesje BFF w Next.js, wtyczka Fastify           |
+| [`@monorise-team/permissions`](packages/permissions) | deklaracja i sprawdzanie uprawnień, zakresy z dziedziczeniem poddrzewa, delegowanie i pamięć podręczna migawek                |
+| [`@monorise-team/events`](packages/events)           | zdarzenia między usługami: koperta komunikatu, definicje i katalog, outbox, odbiorca odporny na duplikaty i zmianę kolejności |
+| [`apps/playground`](apps/playground)                 | katalog komponentów (nie jest publikowany)                                                                                    |
 
 ## Uruchomienie
 

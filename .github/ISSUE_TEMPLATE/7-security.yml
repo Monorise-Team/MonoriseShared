@@ -50,6 +50,10 @@ body:
         - config
         - auth
         - permissions
+        - events
+        - sdk
+        - testing
+        - utils
         - playground
         - release
         - całe repozytorium
