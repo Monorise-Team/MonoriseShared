@@ -13,6 +13,7 @@
         { "type": "json", "path": "packages/config/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/events/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/permissions/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/sdk/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/tokens/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/ui/package.json", "jsonpath": "$.version" }
       ]
