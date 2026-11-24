@@ -4,7 +4,7 @@ Instrukcje dla agentów AI (i ludzi) pracujących w repozytorium MonoriseShared.
 
 ## Czym jest to repozytorium
 
-Wspólne biblioteki Monorise (`@monorise-team/*`) w przestrzeni roboczej pnpm z Turborepo: `packages/config`, `packages/tokens`, `packages/ui`, `packages/auth` oraz katalog komponentów `apps/playground`. Decyzje: ADR-0087 (wersje), ADR-0091 (wygląd), ADR-0092 (pnpm i Turborepo), ADR-0022, ADR-0023 i ADR-0050 (logowanie) w repozytorium MonoriseDocumentation.
+Wspólne biblioteki Monorise (`@monorise-team/*`) w przestrzeni roboczej pnpm z Turborepo: `packages/config`, `packages/tokens`, `packages/ui`, `packages/auth`, `packages/events` oraz katalog komponentów `apps/playground`. Decyzje: ADR-0087 (wersje), ADR-0091 (wygląd), ADR-0092 (pnpm i Turborepo), ADR-0022, ADR-0023 i ADR-0050 (logowanie), ADR-0045 (zdarzenia) w repozytorium MonoriseDocumentation.
 
 ## Polecenia
 
@@ -35,3 +35,4 @@ pnpm check:versions # jedna wersja wszystkich paczek
 7. **Importy z rozszerzeniem `.js`** w `packages/*/src` (moduły NodeNext), `"use client"` w plikach z hookami albo Radix.
 8. **Nowa paczka** dostaje tę samą wersję co reszta, `publishConfig.registry` GitHub Packages i wpis w `release-please-config.json` (`extra-files`).
 9. **Logowanie (`packages/auth`)** to obszar bezpieczeństwa: zmiany przegląda właściciel projektu. Token sprawdzamy zawsze w całości (podpis EdDSA, wystawca, odbiorca, typ `at+jwt`, ważność, pola firmy); każde logowanie ma PKCE, `state`, `nonce` i `iss`; tokeny nie trafiają do przeglądarki ani do logów. Nowe zachowanie dostaje test na sztucznym Core (`test/fake-core.ts`) i próbę na lokalnym MonoriseCore.
+10. **Zdarzenia (`packages/events`)** działają według ADR-0045 i `05-integration/events.md`: schematy `data` dodajemy tylko dla zdarzeń opisanych w dokumentacji; odbiorcy są idempotentni (pomijają duplikaty po identyfikatorze i porównują `resourceVersion`); pole `data` zawiera minimum bez danych wrażliwych.
