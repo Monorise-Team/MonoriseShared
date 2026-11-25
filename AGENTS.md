@@ -67,7 +67,7 @@ Instrukcje dla agentów AI (i ludzi) pracujących w repozytorium MonoriseShared.
 
 ## Czym jest to repozytorium
 
-Wspólne biblioteki Monorise (`@monorise-team/*`) w przestrzeni roboczej pnpm z Turborepo: `packages/config`, `packages/tokens`, `packages/ui`, `packages/auth`, `packages/permissions`, `packages/events`, `packages/sdk` oraz katalog komponentów `apps/playground`. Decyzje: ADR-0087 (wersje), ADR-0091 (wygląd), ADR-0092 (pnpm i Turborepo), ADR-0022, ADR-0023 i ADR-0050 (logowanie), ADR-0032–0036 (uprawnienia i zakresy), ADR-0044 (standardy API), ADR-0045 (zdarzenia) w repozytorium MonoriseDocumentation.
+Wspólne biblioteki Monorise (`@monorise-team/*`) w przestrzeni roboczej pnpm z Turborepo: `packages/config`, `packages/tokens`, `packages/ui`, `packages/auth`, `packages/permissions`, `packages/events`, `packages/sdk`, `packages/testing` oraz katalog komponentów `apps/playground`. Decyzje: ADR-0087 (wersje), ADR-0091 (wygląd), ADR-0092 (pnpm i Turborepo), ADR-0022, ADR-0023 i ADR-0050 (logowanie), ADR-0032–0036 (uprawnienia i zakresy), ADR-0037 (RLS), ADR-0044 (standardy API), ADR-0045 (zdarzenia), ADR-0046 i ADR-0075 (kontrakt produktu i testy zgodności) w repozytorium MonoriseDocumentation.
 
 ## Polecenia
 
@@ -92,3 +92,4 @@ pnpm check:versions # jedna wersja wszystkich paczek
 10. **Uprawnienia (`packages/permissions`)** to obszar bezpieczeństwa: zmiany przegląda właściciel projektu. Domyślnie odmawiamy (nieznana jednostka, pusty cel, brak produktu dają odmowę); każde nowe zachowanie dostaje test na przykładach z dokumentacji.
 11. **Zdarzenia (`packages/events`)** działają według ADR-0045 i `05-integration/events.md`: schematy `data` dodajemy tylko dla zdarzeń opisanych w dokumentacji; odbiorcy są idempotentni (pomijają duplikaty po identyfikatorze i porównują `resourceVersion`); pole `data` zawiera minimum bez danych wrażliwych.
 12. **Klient Core (`packages/sdk`)**: typy i metody pochodzą wyłącznie z wygenerowanego opisu OpenAPI Core (`openapi/core-api.json`); aktualizujemy je poleceniem `pnpm --filter @monorise-team/sdk sync`, nigdy ręcznie w `src/generated/`. Kod uruchomieniowy używa tylko `fetch` (bez zależności od Node.js) i wysyła token tylko do operacji chronionych.
+13. **Testy zgodności (`packages/testing`)**: atrapa Core odwzorowuje prawdziwe reguły Core (koperta `{ data, meta, error }`, migawki walidowane przez `permissionSnapshotSchema`, `Entitlement` + `AppAccess`/Owner, jednostki `ARCHIVED`, `INVITED`/`DEACTIVATED`, stronicowanie kursorowe); `vitest` pozostaje opcjonalny i importowany wyłącznie leniwie.
