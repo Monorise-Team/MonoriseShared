@@ -6,10 +6,11 @@ Biblioteka podąża ściśle za opisem Core API: zawiera tylko te typy i metody,
 
 ## Dostępne operacje
 
-Wszystkie metody pochodzą bezpośrednio z `openapi/core-api.json` (etapy 1–3 dziedziny Core):
+Wszystkie metody pochodzą bezpośrednio z `openapi/core-api.json` (etapy 1–3 dziedziny Core i zaproszenia):
 
 - **System (publiczne, bez tokenu)**: `getHealth`, `getOpenApi`
 - **Konto, firma i pracownicy**: `getMe`, `getOrganization`, `transferOrganizationOwner`, `listEmployees`, `createEmployee`
+- **Zaproszenia pracowników**: `listInvitations`, `createInvitation`, `resendInvitation`, `revokeInvitation`
 - **Struktura firmy**: `listUnits`, `createUnit`, `updateUnit`, `listUnitMembers`, `putUnitMember`, `deleteUnitMember`
 - **Uprawnienia i role**: `listPermissions`, `listRoles`, `getRole`, `createRole`, `updateRole`, `archiveRole`, `listRoleAssignments`, `createRoleAssignment`, `deleteRoleAssignment`
 - **Dostęp do aplikacji**: `listEntitlements`, `listAppAccess`, `grantAppAccess`, `revokeAppAccess`
@@ -34,7 +35,7 @@ console.log(me.organization.name); // "Acme"
 
 Adres `baseUrl` wskazuje serwer (np. `http://localhost:3200` lokalnie albo `https://api.monorise.studio` produkcyjnie) — ścieżki operacji zawierają już `/core/v1`.
 
-Operacje publiczne (`getHealth()`, `getOpenApi()`) nigdy nie wywołują `getAccessToken` ani nie wysyłają nagłówka `Authorization`. Operacje chronione (zarówno tokenem użytkownika, jak i tokenem maszynowym produktu) rzucają `CoreApiMissingTokenError` jeszcze przed wysłaniem żądania, gdy tokenu brakuje. `getOpenApi()` zwraca surowy dokument OpenAPI (zgodnie ze specyfikacją nie jest owinięty w kopertę), a operacje zwracające `204 No Content` (`deleteUnitMember`, `archiveRole`, `deleteRoleAssignment`, `revokeAppAccess`) zwracają `void`.
+Operacje publiczne (`getHealth()`, `getOpenApi()`) nigdy nie wywołują `getAccessToken` ani nie wysyłają nagłówka `Authorization`. Operacje chronione (zarówno tokenem użytkownika, jak i tokenem maszynowym produktu) rzucają `CoreApiMissingTokenError` jeszcze przed wysłaniem żądania, gdy tokenu brakuje. `getOpenApi()` zwraca surowy dokument OpenAPI (zgodnie ze specyfikacją nie jest owinięty w kopertę), a operacje zwracające `204 No Content` (`deleteUnitMember`, `archiveRole`, `deleteRoleAssignment`, `revokeAppAccess`, `revokeInvitation`) zwracają `void`.
 
 ## Stronicowanie list
 

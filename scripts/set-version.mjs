@@ -7,7 +7,7 @@
  *
  * Wypisuje ustawioną wersję. Wersji w repozytorium nie zmieniamy ręcznie: robi to Release Please.
  */
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
@@ -23,6 +23,8 @@ if (kind === "dev") {
 }
 for (const dir of readdirSync(join(root, "packages"))) {
   const file = join(root, "packages", dir, "package.json");
+  // Tylko katalogi paczek (pomija np. .DS_Store z macOS)
+  if (!existsSync(file)) continue;
   const pkg = JSON.parse(readFileSync(file, "utf8"));
   pkg.version = target;
   writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
