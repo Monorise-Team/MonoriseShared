@@ -2,6 +2,7 @@ export { cn } from "./lib/cn.js";
 export {
   APPEARANCE_STORAGE_KEY,
   WALLPAPER_BLUR_MAX,
+  WALLPAPER_BLUR_SCALE,
   WALLPAPER_DIM_MAX,
   appearanceInitScript,
   applyAppearance,

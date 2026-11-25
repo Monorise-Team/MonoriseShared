@@ -96,7 +96,13 @@ export function resolveMode(mode: ModePreference, systemDark: boolean): "light" 
   return mode === "system" ? (systemDark ? "dark" : "light") : mode;
 }
 
-/** Ustawia klasy i atrybuty na <html>: `dark`, `data-theme`, `data-backdrop`, `data-font-scale`, `data-density`, `reduce-motion`, `no-glass`. */
+/** Powiększenie rozmytej tapety, żeby nie było widać jej brzegów (jak w aven-mail). */
+export const WALLPAPER_BLUR_SCALE = 1.06;
+
+/**
+ * Ustawia klasy i atrybuty na <html>: `dark`, `data-theme`, `data-backdrop`, `data-font-scale`, `data-density`,
+ * `reduce-motion`, `no-glass`, oraz zmienne tapety `--mr-wallpaper-dim`, `--mr-wallpaper-blur`, `--mr-wallpaper-scale`.
+ */
 export function applyAppearance(
   root: HTMLElement,
   appearance: Pick<Appearance, "mode" | "theme" | "reduceMotion" | "glass"> & Partial<Appearance>,
@@ -111,11 +117,14 @@ export function applyAppearance(
   root.dataset.backdrop = normalized.backdrop;
   root.dataset.fontScale = normalized.fontScale;
   root.dataset.density = normalized.density;
+  root.style.setProperty("--mr-wallpaper-dim", String(normalized.wallpaperDim / 100));
+  root.style.setProperty("--mr-wallpaper-blur", `${normalized.wallpaperBlur}px`);
+  root.style.setProperty("--mr-wallpaper-scale", normalized.wallpaperBlur > 0 ? String(WALLPAPER_BLUR_SCALE) : "1");
 }
 
 /**
  * Skrypt do wstawienia w <head> przed pierwszym malowaniem (np. w layout.tsx Next.js), żeby strona nie
- * mignęła złym trybem ani rozmiarem tekstu. Robi to samo co applyAppearance, bez Reacta.
+ * mignęła złym trybem, tapetą ani rozmiarem tekstu. Robi to samo co applyAppearance, bez Reacta.
  */
 export const appearanceInitScript = `(function(){try{var a=JSON.parse(localStorage.getItem(${JSON.stringify(
   APPEARANCE_STORAGE_KEY,
@@ -125,4 +134,6 @@ export const appearanceInitScript = `(function(){try{var a=JSON.parse(localStora
   fontScaleNames,
 )}.indexOf(a.fontScale)>=0?a.fontScale:${JSON.stringify(defaultFontScale)};r.dataset.density=${JSON.stringify(
   densityNames,
-)}.indexOf(a.density)>=0?a.density:${JSON.stringify(defaultDensity)};})();`;
+)}.indexOf(a.density)>=0?a.density:${JSON.stringify(
+  defaultDensity,
+)};function n(v,x){return typeof v==="number"&&isFinite(v)?Math.max(0,Math.min(x,Math.round(v))):0}var w=n(a.wallpaperDim,${WALLPAPER_DIM_MAX}),b=n(a.wallpaperBlur,${WALLPAPER_BLUR_MAX}),s=r.style;s.setProperty("--mr-wallpaper-dim",String(w/100));s.setProperty("--mr-wallpaper-blur",b+"px");s.setProperty("--mr-wallpaper-scale",b>0?"${WALLPAPER_BLUR_SCALE}":"1");})();`;

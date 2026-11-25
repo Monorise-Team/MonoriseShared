@@ -69,18 +69,51 @@
     color: var(--mr-backdrop-fg);
   }
 
+  /*
+   * Tapetę wybiera CSS z atrybutu data-theme na <html>, który appearanceInitScript ustawia przed pierwszym
+   * malowaniem: HTML z serwera nie zależy od zapisanego wyglądu, a strona nie miga złą tapetą.
+   * AppBackdrop podaje adresy tapet w zmiennych --mr-wallpaper-<motyw>; własny `theme` ustawia
+   * --mr-wallpaper-image bezpośrednio. Przyciemnienie i rozmycie też przychodzą ze zmiennych na <html>.
+   */
+  .mr-backdrop {
+    --mr-wallpaper-image: var(--mr-wallpaper-mono);
+  }
+
+  :root[data-theme="mono"] .mr-backdrop {
+    --mr-wallpaper-image: var(--mr-wallpaper-mono);
+  }
+
+  :root[data-theme="moonlight"] .mr-backdrop {
+    --mr-wallpaper-image: var(--mr-wallpaper-moonlight);
+  }
+
+  :root[data-theme="amethyst"] .mr-backdrop {
+    --mr-wallpaper-image: var(--mr-wallpaper-amethyst);
+  }
+
+  :root[data-theme="emerald"] .mr-backdrop {
+    --mr-wallpaper-image: var(--mr-wallpaper-emerald);
+  }
+
   .mr-backdrop-image {
     position: absolute;
     inset: 0;
+    background-image: var(--mr-wallpaper-image);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    filter: var(--mr-wallpaper-tone, brightness(1));
+    filter: var(--mr-wallpaper-tone, brightness(1)) blur(var(--mr-wallpaper-blur, 0px));
+    /* Rozmyta tapeta jest powiększona o 6% (transform: scale(1.06);), żeby nie było widać jej brzegów */
+    transform: scale(var(--mr-wallpaper-scale, 1));
   }
 
-  .mr-backdrop-image.is-blurred {
-    filter: var(--mr-wallpaper-tone, brightness(1)) blur(var(--mr-wallpaper-blur, 0px));
-    transform: scale(1.06);
+  /* Tryb `gradient` z ustawień wyglądu: bez tapety i bez welonu, sam gradient z --mr-backdrop */
+  :root[data-backdrop="gradient"] .mr-backdrop:not([data-backdrop="wallpaper"]) .mr-backdrop-image {
+    display: none;
+  }
+
+  :root[data-backdrop="gradient"] .mr-backdrop:not([data-backdrop="wallpaper"])::after {
+    content: none;
   }
 
   .mr-backdrop-dim {
@@ -352,7 +385,7 @@
   background-color: var(--mr-bg-primary);
 }
 
-:root.no-glass .mr-backdrop-image.is-blurred {
+:root.no-glass .mr-backdrop-image {
   filter: var(--mr-wallpaper-tone, brightness(1));
   transform: none;
 }
@@ -373,7 +406,7 @@
     -webkit-backdrop-filter: none;
   }
 
-  .mr-backdrop-image.is-blurred {
+  .mr-backdrop-image {
     filter: var(--mr-wallpaper-tone, brightness(1));
     transform: none;
   }
