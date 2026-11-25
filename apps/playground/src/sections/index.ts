@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { ButtonsSection } from "./ButtonsSection";
+import { CommandsSection } from "./CommandsSection";
 import { DataDisplaySection } from "./DataDisplaySection";
 import { FormsSection } from "./FormsSection";
 import { FoundationsSection } from "./FoundationsSection";
@@ -24,4 +25,5 @@ export const SECTIONS: PlaygroundSection[] = [
   { id: "overlays", title: "Okna i podpowiedzi", Component: OverlaysSection },
   { id: "overlays-extra", title: "Menu kontekstowe, powiadomienia i błędy", Component: OverlaysExtraSection },
   { id: "shell", title: "Szkielet i ustawienia", Component: ShellSection },
+  { id: "commands", title: "Paleta poleceń i skróty", Component: CommandsSection },
 ];

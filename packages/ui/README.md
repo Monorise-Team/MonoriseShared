@@ -96,7 +96,7 @@ const id = toast({
 - `SettingsLayout`, `SettingSection`, `SettingRow`, `SettingToggleRow`: układ ustawień oparty o `@container` (pionowa nawigacja `w-48` przełącza się w CSS poniżej 640 px na poziomy pasek) oraz wiersze z etykietą, opisem i `Switch`.
 - `AppearanceControls`: gotowy zestaw kontrolek oparty o `useTheme()` (karty 4 motywów, tryb Jasny/Ciemny/System, tło Zdjęcie/Gradient, przyciemnienie 0–80%, rozmycie 0–24 px, skala tekstu, gęstość, ruch i szkło) z domyślnymi polskimi napisami i możliwością nadpisania przez `labels`.
 
-```tsx
+````tsx
 <AppShell
   titleBar={
     <TitleBar title="Acme · Poczta">
@@ -116,4 +116,28 @@ const id = toast({
   </SidebarShell>
   <ResizableSplitPane storageKey="mail-split" primary={<ListCard />} secondary={<ReadingCard />} />
 </AppShell>
-```
+
+## Paleta poleceń i skróty
+
+Komponenty i hooki do obsługi skrótów klawiszowych (wzór 1:1 z desktopowego Aven):
+
+- `CommandPalette` i `useCommandPalette`: okno szybkiego wyszukiwania na Radix Dialog (`mr-float`, warstwa `--mr-z-modal`), z sekcjami, podpowiedziami `Kbd`, filtrowaniem bez rozróżniania polskich znaków (np. `"zapros"` znajduje `"Zaproś osobę"`), nawigacją strzałkami/`Home`/`End`/`Enter` oraz opcjonalnym asynchronicznym `onSearch`. `useCommandPalette({ slash: true })` otwiera paletę przez `mod+k` (⌘K na Apple, Ctrl+K na Windows/Linux) oraz `/` poza polami tekstowymi.
+- `ShortcutsHelp`: okno dialogowe ze ściągą skrótów podzieloną na kategorie (`bindShortcut` włącza otwieranie przez `?`).
+- `ShortcutRecorder`: przycisk nagrywania skrótu (pojedynczego akordu lub sekwencji dwóch klawiszy) z walidacją konfliktów i skrótów zastrzeżonych; `Escape` anuluje, `Backspace` czyści skrót.
+- `useHotkeys` oraz `lib/shortcuts`: obsługa pojedynczych klawiszy, akordów (`"mod+k"`, `"shift+?"`) i sekwencji w oknie 1 s (`"g i"`), automatycznie pomijająca zdarzenia w polach tekstowych bez `allowInInputs`.
+
+```tsx
+const palette = useCommandPalette({ slash: true });
+
+<CommandPalette
+  open={palette.open}
+  onOpenChange={palette.onOpenChange}
+  groups={[
+    {
+      id: "firma",
+      label: "Firma",
+      items: [{ id: "pracownicy", label: "Lista pracowników", shortcut: "g p", onSelect: () => {} }],
+    },
+  ]}
+/>;
+````
