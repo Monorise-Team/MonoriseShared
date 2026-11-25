@@ -9,13 +9,46 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
-        { "type": "json", "path": "packages/auth/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/config/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/events/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/permissions/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/sdk/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/tokens/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/ui/package.json", "jsonpath": "$.version" }
+        {
+          "type": "json",
+          "path": "packages/auth/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/config/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/events/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/permissions/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/sdk/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/testing/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/tokens/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/ui/package.json",
+          "jsonpath": "$.version"
+        }
       ]
     }
   }

@@ -11,6 +11,7 @@ Wspólne biblioteki Monorise publikowane w GitHub Packages pod nazwą `@monorise
 | [`@monorise-team/permissions`](packages/permissions) | deklaracja i sprawdzanie uprawnień, zakresy z dziedziczeniem poddrzewa, delegowanie i pamięć podręczna migawek                |
 | [`@monorise-team/events`](packages/events)           | zdarzenia między usługami: koperta komunikatu, definicje i katalog, outbox, odbiorca odporny na duplikaty i zmianę kolejności |
 | [`@monorise-team/sdk`](packages/sdk)                 | typowany klient Core API generowany z opisu OpenAPI (działa w przeglądarce, Node.js i Expo, tylko `fetch`)                    |
+| [`@monorise-team/testing`](packages/testing)         | testy zgodności produktów z Core (ADR-0046): wystawca tokenów, atrapa Core, walidacja OpenAPI, kopert i separacji firm        |
 | [`apps/playground`](apps/playground)                 | katalog komponentów (nie jest publikowany)                                                                                    |
 
 ## Uruchomienie

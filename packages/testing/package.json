@@ -1,0 +1,54 @@
+{
+  "name": "@monorise-team/testing",
+  "version": "0.0.0",
+  "description": "Wspólne testy zgodności produktów Monorise z Core: atrapa Core, tokeny, migawki uprawnień i gotowe testy kontraktu",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Monorise-Team/MonoriseShared.git",
+    "directory": "packages/testing"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint --max-warnings=0 .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@monorise-team/events": "workspace:*",
+    "@monorise-team/permissions": "workspace:*",
+    "jose": "^6.2.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@monorise-team/config": "workspace:*",
+    "@types/node": "^24.10.0",
+    "eslint": "^10.15.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  },
+  "peerDependencies": {
+    "vitest": "^5.1.1"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  }
+}
