@@ -1,6 +1,7 @@
 import { themeNames, themes, type ThemeName } from "@monorise-team/tokens";
 import {
   AppShell,
+  AppearanceControls,
   Button,
   Card,
   CardHeader,
@@ -15,7 +16,6 @@ import {
 } from "@monorise-team/ui";
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
-import { AppearanceControls } from "./AppearanceControls";
 import { MailDemo } from "./MailDemo";
 import { SECTIONS } from "./sections";
 
