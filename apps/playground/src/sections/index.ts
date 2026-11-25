@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { ButtonsSection } from "./ButtonsSection";
+import { CommandsSection } from "./CommandsSection";
 import { DataDisplaySection } from "./DataDisplaySection";
 import { FormsSection } from "./FormsSection";
 import { FoundationsSection } from "./FoundationsSection";
@@ -20,4 +21,5 @@ export const SECTIONS: PlaygroundSection[] = [
   { id: "navigation", title: "Nawigacja", Component: NavigationSection },
   { id: "data-display", title: "Dane i stany", Component: DataDisplaySection },
   { id: "overlays", title: "Okna i podpowiedzi", Component: OverlaysSection },
+  { id: "commands", title: "Paleta poleceń i skróty", Component: CommandsSection },
 ];
