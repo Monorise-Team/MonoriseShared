@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 
-/** Sztuczny serwer OAuth zachowujący się jak MonoriseCore (sprawdzone na lokalnym Core 23.11.2026). */
+/**
+ * Sztuczny serwer OAuth zachowujący się jak MonoriseCore (@better-auth/oauth-provider 1.7.27):
+ * rotacja tokenu odświeżania oznacza stary token jako unieważniony (`revokedAt`), ponowne użycie
+ * unieważnionego tokenu w `/oauth2/token` lub `/oauth2/revoke` unieważnia całą rodzinę tokenów
+ * tej pary `(clientId, userId)`, a w oknie `reuseIntervalSeconds` zwraca tę samą odpowiedź.
+ */
 
 export const ISSUER = "https://auth.example.test";
 export const RESOURCE = "https://aven.example.test";
@@ -20,8 +25,24 @@ const json = (status: number, body: unknown) =>
 const challengeOf = (verifier: string) => createHash("sha256").update(verifier).digest("base64url");
 
 interface Grant {
+  clientId: string;
   resources: string[];
   nonce: string | undefined;
+}
+
+interface IssuedBody {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+  id_token: string;
+}
+
+interface RefreshEntry extends Grant {
+  accountId: string;
+  revokedAt: number | null;
+  rotatedResponse: IssuedBody | null;
 }
 
 export interface TokenOptions {
@@ -30,52 +51,74 @@ export interface TokenOptions {
   typ?: string;
   expiresIn?: number;
   issuedAt?: number;
+  clientId?: string;
   claims?: Record<string, unknown>;
   omit?: string[];
   key?: Parameters<SignJWT["sign"]>[0];
 }
 
-export async function createFakeCore() {
+export interface FakeCoreOptions {
+  /** Zegar używany do sprawdzania okna `reuseIntervalSeconds`. */
+  now?: () => number;
+  /** Mapa dozwolonych klientów `clientId -> clientSecret`. */
+  clients?: Record<string, string>;
+}
+
+export async function createFakeCore(options: FakeCoreOptions = {}) {
+  const getNow = options.now ?? Date.now;
+  const clients: Record<string, string> = { [CLIENT_ID]: CLIENT_SECRET, ...options.clients };
   const { privateKey, publicKey } = await generateKeyPair("EdDSA", { crv: "Ed25519" });
   const jwk = { ...(await exportJWK(publicKey)), kid: "klucz-1", alg: "EdDSA", use: "sig" };
   const keys = createLocalJWKSet({ keys: [jwk] });
   const codes = new Map<string, Grant & { challenge: string; redirectUri: string; used: boolean }>();
-  const refreshTokens = new Map<string, Grant & { family: string; active: boolean }>();
+  const refreshTokens = new Map<string, RefreshEntry>();
   const calls = { token: 0, refresh: 0, revoke: 0, userinfo: 0 };
-  const state = { authzRevision: 0, accountDeactivated: false, down: false };
+  const state = {
+    authzRevision: 0,
+    accountDeactivated: false,
+    userDeleted: false,
+    scopeShrunk: false,
+    down: false,
+    /** Okno ponownego użycia obróconego tokenu w sekundach (w Core: 20 s). */
+    reuseIntervalSeconds: 0,
+    /** Symulacja ~5 ms luki po rotacji: tyle pierwszych powtórzeń w oknie zwróci 400 invalid_grant bez czyszczenia rodziny. */
+    replayGapResponses: 0,
+    /** Wymuszony błąd OAuth na refresh_token (np. `invalid_client`). */
+    refreshError: null as { error: string; status?: number; description?: string } | null,
+  };
 
   /** Token dostępu jak z Core: `at+jwt`, EdDSA, odbiorcy API i `userinfo`. */
-  async function token(options: TokenOptions = {}): Promise<string> {
-    const issuedAt = options.issuedAt ?? Math.floor(Date.now() / 1000);
+  async function token(tokenOptions: TokenOptions = {}): Promise<string> {
+    const issuedAt = tokenOptions.issuedAt ?? Math.floor(Date.now() / 1000);
     const claims: Record<string, unknown> = {
       org_id: ORGANIZATION_ID,
       employee_id: EMPLOYEE_ID,
       authz_rev: state.authzRevision,
       sid: "sesja-core-1",
-      client_id: CLIENT_ID,
+      client_id: tokenOptions.clientId ?? CLIENT_ID,
       scope: "openid profile email offline_access",
-      ...options.claims,
+      ...tokenOptions.claims,
     };
-    const payload = Object.fromEntries(Object.entries(claims).filter(([name]) => !options.omit?.includes(name)));
+    const payload = Object.fromEntries(Object.entries(claims).filter(([name]) => !tokenOptions.omit?.includes(name)));
     return new SignJWT(payload)
-      .setProtectedHeader({ alg: "EdDSA", kid: "klucz-1", typ: options.typ ?? "at+jwt" })
-      .setIssuer(options.issuer ?? ISSUER)
+      .setProtectedHeader({ alg: "EdDSA", kid: "klucz-1", typ: tokenOptions.typ ?? "at+jwt" })
+      .setIssuer(tokenOptions.issuer ?? ISSUER)
       .setSubject(ACCOUNT_ID)
-      .setAudience(options.audience ?? [RESOURCE, USERINFO])
+      .setAudience(tokenOptions.audience ?? [RESOURCE, USERINFO])
       .setIssuedAt(issuedAt)
-      .setExpirationTime(issuedAt + (options.expiresIn ?? 300))
-      .sign(options.key ?? privateKey);
+      .setExpirationTime(issuedAt + (tokenOptions.expiresIn ?? 300))
+      .sign(tokenOptions.key ?? privateKey);
   }
 
-  async function idToken(nonce: string | undefined): Promise<string> {
-    const now = Math.floor(Date.now() / 1000);
-    return new SignJWT({ nonce, sid: "sesja-core-1", acr: "0", auth_time: now })
+  async function idToken(nonce: string | undefined, clientId: string): Promise<string> {
+    const nowSec = Math.floor(Date.now() / 1000);
+    return new SignJWT({ nonce, sid: "sesja-core-1", acr: "0", auth_time: nowSec })
       .setProtectedHeader({ alg: "EdDSA", kid: "klucz-1", typ: "JWT" })
       .setIssuer(ISSUER)
       .setSubject(ACCOUNT_ID)
-      .setAudience(CLIENT_ID)
-      .setIssuedAt(now)
-      .setExpirationTime(now + 3600)
+      .setAudience(clientId)
+      .setIssuedAt(nowSec)
+      .setExpirationTime(nowSec + 3600)
       .sign(privateKey);
   }
 
@@ -84,6 +127,7 @@ export async function createFakeCore() {
     const query = new URL(authorize).searchParams;
     const code = `kod-${crypto.randomUUID()}`;
     codes.set(code, {
+      clientId: query.get("client_id") ?? CLIENT_ID,
       challenge: query.get("code_challenge") ?? "",
       redirectUri: query.get("redirect_uri") ?? "",
       resources: query.getAll("resource"),
@@ -97,17 +141,32 @@ export async function createFakeCore() {
     return back.toString();
   }
 
-  async function issue(grant: Grant, resource: string, family: string): Promise<Response> {
+  function wipeFamily(clientId: string, accountId: string): void {
+    const revokedAt = getNow();
+    for (const entry of refreshTokens.values()) {
+      if (entry.clientId === clientId && entry.accountId === accountId) {
+        entry.revokedAt ??= revokedAt;
+        entry.rotatedResponse = null;
+      }
+    }
+  }
+
+  async function issue(grant: Grant, resource: string): Promise<IssuedBody> {
     const refreshToken = `odswiezanie-${crypto.randomUUID()}`;
-    refreshTokens.set(refreshToken, { ...grant, family, active: true });
-    return json(200, {
-      access_token: await token({ audience: [resource, USERINFO] }),
+    refreshTokens.set(refreshToken, {
+      ...grant,
+      accountId: ACCOUNT_ID,
+      revokedAt: null,
+      rotatedResponse: null,
+    });
+    return {
+      access_token: await token({ audience: [resource, USERINFO], clientId: grant.clientId }),
       token_type: "Bearer",
       expires_in: 300,
       refresh_token: refreshToken,
       scope: "openid profile email offline_access",
-      id_token: await idToken(grant.nonce),
-    });
+      id_token: await idToken(grant.nonce, grant.clientId),
+    };
   }
 
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -118,13 +177,23 @@ export async function createFakeCore() {
       return json(200, { sub: ACCOUNT_ID, email: "anna@acme.test", name: "Anna Kowalska", email_verified: true });
     }
     const form = new URLSearchParams(String(init?.body ?? ""));
-    if (form.get("client_id") !== CLIENT_ID || form.get("client_secret") !== CLIENT_SECRET) {
+    const reqClientId = form.get("client_id") ?? "";
+    const reqClientSecret = form.get("client_secret") ?? "";
+    if (!reqClientId || clients[reqClientId] !== reqClientSecret) {
       return json(401, { error: "invalid_client" });
     }
     if (url.pathname === "/api/auth/oauth2/revoke") {
       calls.revoke++;
       const entry = refreshTokens.get(form.get("token") ?? "");
-      if (entry) entry.active = false;
+      if (entry && entry.clientId === reqClientId) {
+        if (entry.revokedAt !== null) {
+          // Ponowne użycie już obróconego/unieważnionego tokenu w /revoke kasuje całą rodzinę (clientId, userId).
+          wipeFamily(entry.clientId, entry.accountId);
+          return json(400, { error: "invalid_grant" });
+        }
+        entry.revokedAt = getNow();
+        entry.rotatedResponse = null;
+      }
       return new Response(null, { status: 200 });
     }
     if (url.pathname !== "/api/auth/oauth2/token") return json(404, { error: "not_found" });
@@ -132,31 +201,57 @@ export async function createFakeCore() {
     if (form.get("grant_type") === "authorization_code") {
       calls.token++;
       const entry = codes.get(form.get("code") ?? "");
-      if (!entry || entry.used || entry.redirectUri !== form.get("redirect_uri"))
+      if (!entry || entry.used || entry.clientId !== reqClientId || entry.redirectUri !== form.get("redirect_uri")) {
         return json(400, { error: "invalid_grant" });
+      }
       entry.used = true;
       if (challengeOf(form.get("code_verifier") ?? "") !== entry.challenge) {
         return json(400, { error: "invalid_grant", error_description: "PKCE" });
       }
       const resource = form.get("resource") ?? entry.resources[0] ?? "";
       if (!entry.resources.includes(resource)) return json(400, { error: "invalid_target" });
-      return issue(entry, resource, crypto.randomUUID());
+      return json(200, await issue(entry, resource));
     }
     if (form.get("grant_type") === "refresh_token") {
       calls.refresh++;
+      if (state.refreshError) {
+        return json(state.refreshError.status ?? 400, {
+          error: state.refreshError.error,
+          error_description: state.refreshError.description,
+        });
+      }
       const entry = refreshTokens.get(form.get("refresh_token") ?? "");
-      if (!entry) return json(400, { error: "invalid_grant" });
-      if (!entry.active || state.accountDeactivated) {
-        // Ponowne użycie albo dezaktywacja: Core unieważnia całą rodzinę tokenów (RFC 9700).
-        for (const other of refreshTokens.values()) if (other.family === entry.family) other.active = false;
+      if (!entry || entry.clientId !== reqClientId) return json(400, { error: "invalid_grant" });
+      if (state.userDeleted) return json(400, { error: "invalid_request", error_description: "user not found" });
+      if (state.scopeShrunk) return json(400, { error: "invalid_scope" });
+      if (state.accountDeactivated) {
+        wipeFamily(entry.clientId, entry.accountId);
+        return json(400, { error: "invalid_grant" });
+      }
+      if (entry.revokedAt !== null) {
+        const withinReuse =
+          state.reuseIntervalSeconds > 0 &&
+          entry.rotatedResponse !== null &&
+          getNow() - entry.revokedAt <= state.reuseIntervalSeconds * 1000;
+        if (withinReuse) {
+          if (state.replayGapResponses > 0) {
+            state.replayGapResponses--;
+            return json(400, { error: "invalid_grant" });
+          }
+          return json(200, entry.rotatedResponse);
+        }
+        // Ponowne użycie poza oknem: Core unieważnia całą rodzinę tokenów (RFC 9700).
+        wipeFamily(entry.clientId, entry.accountId);
         return json(400, { error: "invalid_grant" });
       }
       const resource = form.get("resource") ?? entry.resources[0] ?? "";
       if (!entry.resources.includes(resource)) {
         return json(400, { error: "invalid_target", error_description: "requested resource invalid" });
       }
-      entry.active = false;
-      return issue(entry, resource, entry.family);
+      const rotated = await issue(entry, resource);
+      entry.revokedAt = getNow();
+      entry.rotatedResponse = rotated;
+      return json(200, rotated);
     }
     return json(400, { error: "unsupported_grant_type" });
   };

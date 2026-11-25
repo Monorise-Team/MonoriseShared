@@ -2,6 +2,8 @@ import { CompactEncrypt, base64url, compactDecrypt, decodeProtectedHeader } from
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+/** Maksymalna długość wejścia akceptowana przez `unseal` przed jakimkolwiek parsowaniem. */
+const MAX_SEALED_LENGTH = 8192;
 
 export interface Sealer {
   seal(value: unknown): Promise<string>;
@@ -44,7 +46,7 @@ export function createSealer(secrets: string[], purpose: string): Sealer {
         .encrypt(current.key);
     },
     async unseal<T>(sealed: string | null | undefined): Promise<T | null> {
-      if (!sealed) return null;
+      if (!sealed || sealed.length > MAX_SEALED_LENGTH) return null;
       try {
         const { kid } = decodeProtectedHeader(sealed);
         const match = (await keys).find((candidate) => candidate.kid === kid);
