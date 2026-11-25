@@ -14,6 +14,19 @@ export type FetchFunction = (input: string, init?: RequestInit) => Promise<Respo
 /** Returns the bearer access token for authenticated Core API operations. */
 export type AccessTokenProvider = () => string | null | undefined | Promise<string | null | undefined>;
 
+/** Retry policy for transient failures on `GET` and `POST` requests with an `Idempotency-Key`. */
+export interface CoreRetryConfig {
+  /** Total attempts including the first request (default `3`, capped at `5`). */
+  readonly attempts?: number;
+  /** Base delay in milliseconds for exponential backoff with full jitter (default `300`). */
+  readonly baseDelayMs?: number;
+  /** Maximum delay in milliseconds between retries, also capping `Retry-After` (default `5000`). */
+  readonly maxDelayMs?: number;
+}
+
+/** Retry setting for `createCoreClient` and individual operation calls (`false` disables retries). */
+export type CoreRetryOption = false | CoreRetryConfig;
+
 export interface CoreClientOptions {
   /** Server origin (for example `http://localhost:3200` or `https://api.monorise.studio`). Operation paths already include `/core/v1`. */
   readonly baseUrl: string;
@@ -23,11 +36,15 @@ export interface CoreClientOptions {
   readonly fetch?: FetchFunction;
   /** Default headers sent with every request (`Authorization` is stripped on public operations). */
   readonly headers?: HeadersInit;
+  /** Retry policy applied to `GET` and `POST` requests carrying `Idempotency-Key` (defaults to `false`). */
+  readonly retry?: CoreRetryOption;
 }
 
 export interface CoreRequestOptions {
   readonly signal?: AbortSignal;
   readonly headers?: HeadersInit;
+  /** Overrides the client-level `retry` setting for this call. */
+  readonly retry?: CoreRetryOption;
 }
 
 /** Single page returned by a cursor-paginated Core API list operation. */
@@ -251,6 +268,126 @@ function parseSuccessEnvelope(payload: unknown): { data: unknown; meta: Record<s
   return { data: payload.data, meta: payload.meta };
 }
 
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const MAX_RETRY_ATTEMPTS = 5;
+const DEFAULT_RETRY_BASE_DELAY_MS = 300;
+const DEFAULT_RETRY_MAX_DELAY_MS = 5000;
+const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
+
+interface ResolvedRetryConfig {
+  readonly attempts: number;
+  readonly baseDelayMs: number;
+  readonly maxDelayMs: number;
+}
+
+function createIdempotencyKey(): string {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  if (cryptoApi && typeof cryptoApi.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+    bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  throw new Error("Unable to generate Idempotency-Key: Web Crypto API is not available");
+}
+
+function resolveRetryConfig(clientRetry?: CoreRetryOption, callRetry?: CoreRetryOption): ResolvedRetryConfig {
+  const selected = callRetry !== undefined ? callRetry : clientRetry;
+  if (!selected) {
+    return {
+      attempts: 1,
+      baseDelayMs: DEFAULT_RETRY_BASE_DELAY_MS,
+      maxDelayMs: DEFAULT_RETRY_MAX_DELAY_MS,
+    };
+  }
+  const attempts =
+    typeof selected.attempts === "number" && Number.isFinite(selected.attempts)
+      ? Math.min(MAX_RETRY_ATTEMPTS, Math.max(1, Math.floor(selected.attempts)))
+      : DEFAULT_RETRY_ATTEMPTS;
+  const baseDelayMs =
+    typeof selected.baseDelayMs === "number" && Number.isFinite(selected.baseDelayMs) && selected.baseDelayMs >= 0
+      ? selected.baseDelayMs
+      : DEFAULT_RETRY_BASE_DELAY_MS;
+  const maxDelayMs =
+    typeof selected.maxDelayMs === "number" && Number.isFinite(selected.maxDelayMs) && selected.maxDelayMs >= 0
+      ? selected.maxDelayMs
+      : DEFAULT_RETRY_MAX_DELAY_MS;
+  return { attempts, baseDelayMs, maxDelayMs };
+}
+
+function isRetryableMethod(method: OperationDefinition["method"], headers: Headers): boolean {
+  if (method === "GET") {
+    return true;
+  }
+  if (method === "POST") {
+    const key = headers.get("idempotency-key");
+    return key !== null && key.trim().length > 0;
+  }
+  return false;
+}
+
+function parseRetryAfterMs(headerValue: string | null, maxDelayMs: number): number | null {
+  if (headerValue === null) {
+    return null;
+  }
+  const trimmed = headerValue.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    if (!Number.isFinite(seconds)) {
+      return maxDelayMs;
+    }
+    return Math.min(maxDelayMs, Math.max(0, seconds * 1000));
+  }
+  const timestamp = Date.parse(trimmed);
+  if (!Number.isNaN(timestamp)) {
+    return Math.min(maxDelayMs, Math.max(0, timestamp - Date.now()));
+  }
+  return null;
+}
+
+function computeRetryDelayMs(attempt: number, baseDelayMs: number, maxDelayMs: number, response?: Response): number {
+  if (response && (response.status === 429 || response.status === 503)) {
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"), maxDelayMs);
+    if (retryAfterMs !== null) {
+      return retryAfterMs;
+    }
+  }
+  const exponential = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+  return Math.random() * exponential;
+}
+
+function getAbortReason(signal: AbortSignal): unknown {
+  return signal.reason !== undefined ? signal.reason : new DOMException("The operation was aborted.", "AbortError");
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(getAbortReason(signal));
+  }
+  if (delayMs <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(getAbortReason(signal!));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function executeOperation(
   baseUrl: string,
   fetchFn: FetchFunction,
@@ -269,6 +406,9 @@ async function executeOperation(
   }
   if (!headers.has("accept")) {
     headers.set("accept", "application/json");
+  }
+  if (operation.method === "POST" && !headers.has("idempotency-key")) {
+    headers.set("Idempotency-Key", createIdempotencyKey());
   }
 
   if (operation.requiresAuth) {
@@ -304,14 +444,32 @@ async function executeOperation(
     init.signal = input.signal;
   }
 
+  const retryConfig = resolveRetryConfig(options.retry, input?.retry);
+  const maxAttempts = isRetryableMethod(operation.method, headers) ? retryConfig.attempts : 1;
+
   let response: Response;
-  try {
-    response = await fetchFn(url, init);
-  } catch (cause) {
-    throw new CoreApiUnavailableError(
-      `Core API request ${operation.method} ${operation.path} failed: service unavailable`,
-      { cause },
-    );
+  for (let attempt = 1; ; attempt++) {
+    try {
+      response = await fetchFn(url, init);
+    } catch (cause) {
+      if (attempt < maxAttempts && !input?.signal?.aborted) {
+        const delayMs = computeRetryDelayMs(attempt, retryConfig.baseDelayMs, retryConfig.maxDelayMs);
+        await waitForRetry(delayMs, input?.signal);
+        continue;
+      }
+      throw new CoreApiUnavailableError(
+        `Core API request ${operation.method} ${operation.path} failed: service unavailable`,
+        { cause },
+      );
+    }
+
+    if (attempt < maxAttempts && RETRYABLE_STATUS_CODES.has(response.status)) {
+      const delayMs = computeRetryDelayMs(attempt, retryConfig.baseDelayMs, retryConfig.maxDelayMs, response);
+      await response.body?.cancel?.().catch(() => undefined);
+      await waitForRetry(delayMs, input?.signal);
+      continue;
+    }
+    break;
   }
 
   if (response.status === 204) {
