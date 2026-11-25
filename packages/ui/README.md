@@ -42,3 +42,28 @@ Ustawienia zapisują się w `localStorage` pod kluczem `monorise-appearance` (st
 Paczka zawiera cztery tapety doliny odpowiadające motywom (`@monorise-team/ui/wallpapers/{mono,moonlight,amethyst,emerald}.jpg`). W trybie jasnym zdjęcie jest wypłowione do pastelu pod jasnym szkłem, a w trybie ciemnym ma delikatne przyciemnienie nad księżycem i paskiem tytułu.
 
 Zdjęcia doliny pochodzą z projektu `aven-mail` właściciela i mogą być używane przez aplikacje Monorise (zdjęcia: Monorise Team).
+
+## Paleta poleceń i skróty
+
+Komponenty i hooki do obsługi skrótów klawiszowych (wzór 1:1 z desktopowego Aven):
+
+- `CommandPalette` i `useCommandPalette`: okno szybkiego wyszukiwania na Radix Dialog (`mr-float`, warstwa `--mr-z-modal`), z sekcjami, podpowiedziami `Kbd`, filtrowaniem bez rozróżniania polskich znaków (np. `"zapros"` znajduje `"Zaproś osobę"`), nawigacją strzałkami/`Home`/`End`/`Enter` oraz opcjonalnym asynchronicznym `onSearch`. `useCommandPalette({ slash: true })` otwiera paletę przez `mod+k` (⌘K na Apple, Ctrl+K na Windows/Linux) oraz `/` poza polami tekstowymi.
+- `ShortcutsHelp`: okno dialogowe ze ściągą skrótów podzieloną na kategorie (`bindShortcut` włącza otwieranie przez `?`).
+- `ShortcutRecorder`: przycisk nagrywania skrótu (pojedynczego akordu lub sekwencji dwóch klawiszy) z walidacją konfliktów i skrótów zastrzeżonych; `Escape` anuluje, `Backspace` czyści skrót.
+- `useHotkeys` oraz `lib/shortcuts`: obsługa pojedynczych klawiszy, akordów (`"mod+k"`, `"shift+?"`) i sekwencji w oknie 1 s (`"g i"`), automatycznie pomijająca zdarzenia w polach tekstowych bez `allowInInputs`.
+
+```tsx
+const palette = useCommandPalette({ slash: true });
+
+<CommandPalette
+  open={palette.open}
+  onOpenChange={palette.onOpenChange}
+  groups={[
+    {
+      id: "firma",
+      label: "Firma",
+      items: [{ id: "pracownicy", label: "Lista pracowników", shortcut: "g p", onSelect: () => {} }],
+    },
+  ]}
+/>;
+```

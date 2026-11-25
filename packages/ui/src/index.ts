@@ -77,3 +77,54 @@ export {
   type TextFieldProps,
 } from "./components/TextField.js";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/Tooltip.js";
+
+// Paleta poleceń i skróty (MonoriseShared#53)
+export {
+  DEFAULT_RESERVED_SHORTCUTS,
+  SEQUENCE_TIMEOUT_MS,
+  createSequenceTracker,
+  findShortcutConflict,
+  formatShortcut,
+  formatShortcutParts,
+  isApplePlatform,
+  isValidShortcut,
+  matchesShortcut,
+  normalizeShortcut,
+  parseShortcut,
+  recordShortcut,
+  shortcutsConflict,
+  validateShortcut,
+  type ExistingShortcutEntry,
+  type ParsedShortcut,
+  type SequenceMatchResult,
+  type SequenceTracker,
+  type ShortcutChord,
+  type ShortcutConflictOptions,
+  type ShortcutFormatOptions,
+  type ShortcutIssue,
+  type ShortcutKeyboardEvent,
+} from "./lib/shortcuts.js";
+export {
+  useHotkeys,
+  type HotkeyBinding,
+  type HotkeyBindings,
+  type HotkeyHandler,
+  type UseHotkeysOptions,
+} from "./lib/useHotkeys.js";
+export {
+  CommandPalette,
+  useCommandPalette,
+  type CommandPaletteGroup,
+  type CommandPaletteItem,
+  type CommandPaletteProps,
+  type CommandPaletteSource,
+  type UseCommandPaletteOptions,
+  type UseCommandPaletteResult,
+} from "./components/CommandPalette.js";
+export {
+  ShortcutsHelp,
+  type ShortcutHelpCategory,
+  type ShortcutHelpItem,
+  type ShortcutsHelpProps,
+} from "./components/ShortcutsHelp.js";
+export { ShortcutRecorder, type ShortcutRecorderProps } from "./components/ShortcutRecorder.js";
