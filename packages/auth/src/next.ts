@@ -94,12 +94,28 @@ interface WebAuthBaseOptions {
   /** API, do których aplikacja potrzebuje tokenów. Pierwsze to API produktu: dla niego są tokeny sesji. */
   resources: [string, ...string[]];
   scopes?: string[];
-  /** Sekret do szyfrowania sesji (co najmniej 32 znaki). Przy wymianie: `[nowy, stary]`. */
+  /**
+   * Sekret do szyfrowania sesji: co najmniej 32 losowe bajty (`openssl rand -base64 32`), nigdy hasło z klawiatury.
+   * Przy wymianie: `[nowy, stary]`.
+   */
   secret: string | string[];
-  /** Nazwa ciasteczka sesji; domyślnie `__Host-monorise-session` (na `http://` bez przedrostka). */
+  /**
+   * Nazwa ciasteczka sesji; domyślnie `__Host-monorise-session` na HTTPS (`monorise-session` na HTTP).
+   * Na HTTPS musi zaczynać się od `__Host-`, a na HTTP nie może zaczynać się od `__Host-` ani `__Secure-`.
+   */
   cookieName?: string;
   /** Najdłuższy czas sesji w sekundach; domyślnie 30 dni, jak token odświeżania w Core. */
   sessionMaxAge?: number;
+  /**
+   * Zapas czasu przed wygaśnięciem tokenu dostępu (w sekundach) dla `authenticate()` i `accessToken()`.
+   * Domyślnie 30 sekund.
+   */
+  refreshMarginSeconds?: number;
+  /**
+   * Szerszy zapas czasu przed wygaśnięciem tokenu (w sekundach) dla `getSession()` w `proxy.ts`,
+   * żeby nawigacja odświeżyła ciasteczko zanim wyrenderuje się Server Component. Domyślnie 120 sekund.
+   */
+  proxyRefreshMarginSeconds?: number;
   /** Dokąd wrócić po wylogowaniu. Domyślnie `/`. */
   afterSignOut?: string;
   /** Dokąd wrócić po nieudanym logowaniu (z parametrem `auth_error`). Domyślnie `/`. */
@@ -127,6 +143,26 @@ export type WebAuthOptions = WebAuthBaseOptions &
 
 export type SessionCookieSource = { readonly setCookies: readonly string[] } | readonly string[];
 
+export interface GetSessionOptions {
+  /**
+   * Czy wolno odświeżyć wygasający token w Core.
+   * W trybie `cookie` domyślnie `false` (bezpieczne w Server Components, które nie mogą wysłać `Set-Cookie`).
+   * Przekaż `true` tylko tam, gdzie sam zapiszesz `session.setCookies` do odpowiedzi (np. Route Handler, Server Action).
+   * W trybie `store` domyślnie `true`.
+   */
+  refresh?: boolean;
+}
+
+export interface WithAuthOptions {
+  /**
+   * Zamienia błąd rzucony przez `authenticate()` albo przez `handler` na odpowiedź HTTP
+   * (np. własny format błędów). Do zwróconej odpowiedzi również trafią odświeżone ciasteczka sesji.
+   * Domyślnie `AuthError` (401/403) i `AuthUnavailableError` (503) są zamieniane na kopertę JSON
+   * `{ data: null, meta: {}, error }`, a pozostałe błędy są rzucane dalej.
+   */
+  onError?: (error: unknown, request: Request) => Response | Promise<Response>;
+}
+
 export interface Session {
   context: AuthContext;
   profile: { email: string | null; name: string | null };
@@ -134,25 +170,34 @@ export interface Session {
   /** Token dostępu dla API (domyślnie API produktu), odświeżany w Core, gdy kończy się jego ważność. */
   accessToken(resource?: string): Promise<string>;
   /**
-   * Nagłówki `Set-Cookie` do dołączenia do odpowiedzi (np. przez `applySessionCookies`),
+   * Nagłówki `Set-Cookie` do dołączenia do odpowiedzi (przez `applySessionCookies` albo `withAuth`),
    * gdy w trybie ciasteczka odświeżono tokeny. W trybie `store` i bez odświeżenia: pusta tablica.
-   * Po wywołaniu `accessToken()` tablica odzwierciedla najnowsze ciasteczko sesji.
+   * Odczyt zawsze zwraca najnowsze znane ciasteczko tej sesji w procesie.
    */
   readonly setCookies: readonly string[];
 }
 
-export interface Authenticated {
-  context: AuthContext;
-  /** `bearer`: aplikacja na komputer albo telefon z tokenem z Core; `session`: przeglądarka z ciasteczkiem. */
-  via: "bearer" | "session";
-  session: Session | null;
-  /**
-   * Nagłówki `Set-Cookie` do dołączenia do odpowiedzi przez `applySessionCookies`.
-   * W trybie `store` i przy `via === "bearer"` zawsze pusta tablica. W trybie ciasteczka zawiera
-   * najnowsze ciasteczko sesji po odświeżeniu (także po `session.accessToken()`).
-   */
-  readonly setCookies: readonly string[];
-}
+export type Authenticated =
+  | {
+      context: AuthContext;
+      /** Aplikacja na komputer albo telefon z tokenem z Core w nagłówku `Authorization: Bearer`. */
+      via: "bearer";
+      session: null;
+      /** Zawsze pusta tablica przy uwierzytelnieniu tokenem Bearer. */
+      readonly setCookies: readonly string[];
+    }
+  | {
+      context: AuthContext;
+      /** Przeglądarka z ciasteczkiem sesji BFF. */
+      via: "session";
+      session: Session;
+      /**
+       * Nagłówki `Set-Cookie` do dołączenia do odpowiedzi przez `applySessionCookies` albo `withAuth`.
+       * W trybie `store` zawsze pusta tablica. W trybie `cookie` zwraca najnowsze ciasteczko tej sesji
+       * po odświeżeniu (także po `session.accessToken()` i przy równoczesnych żądaniach).
+       */
+      readonly setCookies: readonly string[];
+    };
 
 export interface WebAuth {
   /** `GET`: przekierowanie na logowanie w Core. Parametry: `returnTo` (ścieżka w aplikacji), `prompt=login`. */
@@ -161,31 +206,101 @@ export interface WebAuth {
   callback(request: Request): Promise<Response>;
   /** `POST`: kończy sesję aplikacji i unieważnia token odświeżania w Core. */
   signOut(request: Request): Promise<Response>;
-  /** Sesja z ciasteczka żądania albo `null`. */
+  /**
+   * Sesja z ciasteczka żądania albo `null` (odświeża z wyprzedzeniem `proxyRefreshMarginSeconds`, domyślnie 120 s).
+   * Uwaga: NIE sprawdza CSRF — nie używaj do żądań zmieniających stan (`POST`, `PATCH`, `DELETE`);
+   * do tras API służy `authenticate()` albo `withAuth()`.
+   */
   getSession(request: Request): Promise<Session | null>;
-  /** Sesja z wartości ciasteczka, np. w Server Component: `(await cookies()).get(auth.cookieName)?.value`. */
-  getSessionFromCookie(value: string | undefined): Promise<Session | null>;
+  /**
+   * Sesja z wartości ciasteczka, np. w Server Component: `(await cookies()).get(auth.cookieName)?.value`.
+   * W trybie `cookie` domyślnie `refresh: false` (nie wywołuje Core, bo Server Component nie zapisze `Set-Cookie`).
+   */
+  getSessionFromCookie(value: string | undefined, options?: GetSessionOptions): Promise<Session | null>;
   /**
    * Kto pyta w trasie API: token z nagłówka `Authorization` albo sesja z ciasteczka. Zmiany przez ciasteczko
    * (POST, PATCH, DELETE) muszą przyjść z adresu aplikacji (ochrona przed CSRF). Rzuca `AuthError`.
    */
   authenticate(request: Request): Promise<Authenticated>;
+  /**
+   * Zalecany wzorzec w trasach API: uwierzytelnia żądanie, uruchamia `handler` i dołącza odświeżone
+   * ciasteczka sesji do odpowiedzi — także gdy `handler` zwróci błąd albo rzuci `AuthError`/`AuthUnavailableError`
+   * (lub inny błąd zamieniony na odpowiedź przez `onError`).
+   */
+  withAuth(
+    request: Request,
+    handler: (auth: Authenticated) => Response | Promise<Response>,
+    options?: WithAuthOptions,
+  ): Promise<Response>;
   cookieName: string;
   readonly mode: "store" | "cookie";
 }
 
+function cookieNameOf(header: string): string | null {
+  const pair = header.split(";")[0] ?? "";
+  const eq = pair.indexOf("=");
+  if (eq <= 0) return null;
+  return pair.slice(0, eq).trim() || null;
+}
+
+function deduplicateSetCookies(cookies: readonly string[]): { headers: string[]; names: Set<string> } {
+  const order: string[] = [];
+  const byName = new Map<string, string>();
+  for (const header of cookies) {
+    const name = cookieNameOf(header);
+    if (!name) continue;
+    if (!byName.has(name)) order.push(name);
+    byName.set(name, header);
+  }
+  return {
+    headers: order.map((name) => byName.get(name)!),
+    names: new Set(order),
+  };
+}
+
+function writeSetCookies(headers: Headers, incoming: string[], incomingNames: Set<string>): void {
+  const existing = headers.getSetCookie();
+  const hasConflict = existing.some((header) => {
+    const name = cookieNameOf(header);
+    return name !== null && incomingNames.has(name);
+  });
+  if (hasConflict) {
+    const kept = existing.filter((header) => {
+      const name = cookieNameOf(header);
+      return name === null || !incomingNames.has(name);
+    });
+    headers.delete("set-cookie");
+    for (const header of kept) headers.append("Set-Cookie", header);
+  }
+  for (const header of incoming) headers.append("Set-Cookie", header);
+}
+
 /**
- * Dołącza nagłówki `Set-Cookie` z wyniku `authenticate` albo z `Session` do odpowiedzi HTTP.
- * W trybie `store` i gdy nie było odświeżenia tokenów nie zmienia odpowiedzi.
+ * Dołącza (lub podmienia dla tej samej nazwy) nagłówki `Set-Cookie` z wyniku `authenticate` albo z `Session`
+ * w odpowiedzi HTTP i zwraca odpowiedź do odesłania. Działa również na odpowiedziach z niemutowalnymi nagłówkami
+ * (np. `Response.redirect()` albo wynik `fetch()`), tworząc wtedy nową kopię `Response`.
+ * W trybie `store` i gdy nie było odświeżenia zwraca oryginalną odpowiedź bez zmian.
  */
-export function applySessionCookies<T extends Response>(
-  response: T,
-  source: SessionCookieSource | null | undefined,
-): T {
+export function applySessionCookies(response: Response, source: SessionCookieSource | null | undefined): Response {
   if (!source) return response;
-  const cookies = "setCookies" in source ? source.setCookies : source;
-  for (const header of cookies) response.headers.append("Set-Cookie", header);
-  return response;
+  const rawCookies = "setCookies" in source ? source.setCookies : source;
+  if (rawCookies.length === 0) return response;
+  const { headers: incoming, names } = deduplicateSetCookies(rawCookies);
+  if (incoming.length === 0) return response;
+
+  try {
+    writeSetCookies(response.headers, incoming, names);
+    return response;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    const headers = new Headers(response.headers);
+    writeSetCookies(headers, incoming, names);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  }
 }
 
 /**
@@ -268,17 +383,23 @@ interface RecentCookieRefresh {
 
 type ResolvedMode = { kind: "store"; store: SessionStore } | { kind: "cookie"; maxCookieBytes: number };
 
+type RefreshOutcome = { status: "ok"; data: SessionData } | { status: "invalid_grant" } | { status: "ended" };
+
 const utf8 = new TextEncoder();
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const TRANSACTION_TTL_MS = 10 * 60_000;
-/** Token odświeżamy, gdy zostało mu mniej niż 30 sekund. */
-const REFRESH_MARGIN_MS = 30_000;
+/** Domyślny zapas czasu dla `authenticate()` i `accessToken()` (30 s). */
+const DEFAULT_REFRESH_MARGIN_SECONDS = 30;
+/** Domyślny szerszy zapas czasu dla `getSession()` w `proxy.ts` (120 s). */
+const DEFAULT_PROXY_REFRESH_MARGIN_SECONDS = 120;
 const DEFAULT_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 /** Zapas poniżej limitu 4096 bajtów na ciasteczko w przeglądarkach (nazwa + atrybuty zajmują ~110 bajtów). */
 const DEFAULT_MAX_COOKIE_BYTES = 3800;
 /** Krótkie okno pamięci podręcznej w procesie dla równoczesnych żądań z tym samym wygasającym ciasteczkiem. */
 const REFRESH_CACHE_TTL_MS = 30_000;
 const MAX_REFRESH_CACHE_ENTRIES = 1000;
+/** Opóźnienie jednorazowej powtórki po `invalid_grant` (pokrywa ~5 ms lukę ponownego użycia w Core). */
+const INVALID_GRANT_RETRY_DELAY_MS = 100;
 
 const dehydrate = (context: AuthContext): SessionData["context"] => ({
   ...context,
@@ -288,6 +409,8 @@ const hydrate = (context: SessionData["context"]): AuthContext => ({
   ...context,
   expiresAt: new Date(context.expiresAt),
 });
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function resolveMode(options: WebAuthOptions): ResolvedMode {
   const hasStore = options.store !== undefined;
@@ -313,6 +436,37 @@ function resolveMode(options: WebAuthOptions): ResolvedMode {
     return { kind: "cookie", maxCookieBytes };
   }
   throw new Error("Nieznany tryb sesji w `session.mode`");
+}
+
+function hasInvalidCookieNameChar(name: string): boolean {
+  for (let i = 0; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    if (code <= 0x20 || code >= 0x7f || name[i] === ";" || name[i] === "=") return true;
+  }
+  return false;
+}
+
+function validateCookieName(name: string, secure: boolean): string {
+  if (!name || hasInvalidCookieNameChar(name)) {
+    throw new Error(
+      "Nieprawidłowa nazwa ciasteczka w `cookieName`: nie może być pusta ani zawierać `;`, `=`, białych znaków ani znaków sterujących",
+    );
+  }
+  if (secure && !name.startsWith("__Host-")) {
+    throw new Error("Na HTTPS nazwa ciasteczka w `cookieName` musi zaczynać się od przedrostka `__Host-`");
+  }
+  if (!secure && (name.startsWith("__Host-") || name.startsWith("__Secure-"))) {
+    throw new Error("Na HTTP nazwa ciasteczka w `cookieName` nie może zaczynać się od `__Host-` ani `__Secure-`");
+  }
+  return name;
+}
+
+function validateMarginSeconds(value: number | undefined, fallback: number, name: string): number {
+  const seconds = value ?? fallback;
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
+    throw new Error(`Parametr \`${name}\` musi być nieujemną liczbą`);
+  }
+  return seconds * 1000;
 }
 
 function isValidSessionData(value: unknown): value is SessionData {
@@ -342,17 +496,34 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
   const app = new URL(options.appUrl);
   const appOrigin = app.origin;
   const secure = app.protocol === "https:";
-  const sessionCookie = options.cookieName ?? (secure ? "__Host-monorise-session" : "monorise-session");
+  const sessionCookie = validateCookieName(
+    options.cookieName ?? (secure ? "__Host-monorise-session" : "monorise-session"),
+    secure,
+  );
   const transactionCookie = secure ? "__Host-monorise-oauth" : "monorise-oauth";
   const redirectUri = new URL(options.callbackPath ?? "/api/auth/callback", appOrigin).toString();
   const primary = options.resources[0];
   const scopes = options.scopes ?? DEFAULT_SCOPES;
   const maxAgeMs = (options.sessionMaxAge ?? DEFAULT_SESSION_MAX_AGE) * 1000;
+  const refreshMarginMs = validateMarginSeconds(
+    options.refreshMarginSeconds,
+    DEFAULT_REFRESH_MARGIN_SECONDS,
+    "refreshMarginSeconds",
+  );
+  const proxyRefreshMarginMs = validateMarginSeconds(
+    options.proxyRefreshMarginSeconds,
+    DEFAULT_PROXY_REFRESH_MARGIN_SECONDS,
+    "proxyRefreshMarginSeconds",
+  );
   const now = options.now ?? Date.now;
   const secrets = Array.isArray(options.secret) ? options.secret : [options.secret];
+  const normalizedIssuer = options.issuer.replace(/\/+$/, "");
+  const cookieBinding = JSON.stringify([normalizedIssuer, options.clientId, appOrigin, sessionCookie]);
+  const transactionBinding = JSON.stringify([normalizedIssuer, options.clientId, appOrigin, transactionCookie]);
+  // Cel `"session"` w trybie `store` pozostaje bez zmian dla zgodności z istniejącymi wierszami w bazie.
   const sessions = createSealer(secrets, "session");
-  const cookieSessions = createSealer(secrets, "cookie-session");
-  const transactions = createSealer(secrets, "oauth-transaction");
+  const cookieSessions = createSealer(secrets, `cookie-session:${cookieBinding}`);
+  const transactions = createSealer(secrets, `oauth-transaction:${transactionBinding}`);
   const keys = options.keys ?? remoteKeys(oauthEndpoints(options.issuer).jwks);
   const client = {
     issuer: options.issuer,
@@ -423,13 +594,13 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
 
   // ── Wspólna logika odświeżania i kolejkowania ────────────────────────────────────────────────────────
 
-  const isFresh = (data: SessionData, resource: string) => {
+  const isFresh = (data: SessionData, resource: string, marginMs: number) => {
     const token = data.tokens[resource];
-    return token !== undefined && token.expiresAt - now() > REFRESH_MARGIN_MS;
+    return token !== undefined && token.expiresAt - now() > marginMs;
   };
 
   // Core wydaje przy odświeżeniu nowy token odświeżania i unieważnia rodzinę tokenów, gdy stary zostanie użyty
-  // drugi raz. Dlatego równoczesne żądania jednej sesji odświeżają tokeny po kolei, a nie naraz.
+  // po oknie ponownego użycia. Równoczesne żądania jednej sesji w procesie kolejkujemy, żeby nie ścigały się w Core.
   const locks = new Map<string, Promise<unknown>>();
   function exclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
     const previous = locks.get(id) ?? Promise.resolve();
@@ -442,16 +613,19 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     return run;
   }
 
-  async function requestRefreshedSession(current: SessionData, resource: string): Promise<SessionData | null> {
+  async function requestRefreshedSession(current: SessionData, resource: string): Promise<RefreshOutcome> {
     let tokens: TokenResponse;
     try {
       tokens = await refreshTokens({ ...client, refreshToken: current.refreshToken, resource });
     } catch (error) {
-      if (error instanceof OAuthError && error.error === "invalid_grant") {
-        // Core nie przedłuża sesji: wylogowanie w Core, dezaktywacja konta albo unieważnione tokeny.
-        return null;
+      if (error instanceof OAuthError && error.status >= 400 && error.status < 500) {
+        if (error.error === "invalid_grant") return { status: "invalid_grant" };
+        // Usunięte konto (`invalid_request`) albo obcięte zakresy (`invalid_scope`) kończą sesję.
+        if (error.error === "invalid_scope" || error.error === "invalid_request") return { status: "ended" };
+        // Błędy konfiguracji klienta (`invalid_client`, `unauthorized_client`, `invalid_target`) nie kończą sesji
+        // i nigdy nie wypuszczają surowego `OAuthError` poza bibliotekę.
+        throw new AuthUnavailableError(`Błąd konfiguracji klienta OAuth w Core (${error.error})`, { cause: error });
       }
-      if (error instanceof OAuthError && error.status < 500) throw error;
       throw new AuthUnavailableError("Core nie odświeżył tokenów", { cause: error });
     }
 
@@ -460,10 +634,10 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
       context = await verifierFor(resource)(tokens.access_token);
     } catch (error) {
       if (error instanceof AuthUnavailableError) throw error;
-      return null;
+      return { status: "ended" };
     }
     if (context.accountId !== current.context.accountId || context.organizationId !== current.context.organizationId) {
-      return null;
+      return { status: "ended" };
     }
 
     const refreshedAt = now();
@@ -474,10 +648,13 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     activeTokens[resource] = { value: tokens.access_token, expiresAt: refreshedAt + tokens.expires_in * 1000 };
 
     return {
-      ...current,
-      context: dehydrate(context),
-      refreshToken: tokens.refresh_token ?? current.refreshToken,
-      tokens: activeTokens,
+      status: "ok",
+      data: {
+        ...current,
+        context: dehydrate(context),
+        refreshToken: tokens.refresh_token ?? current.refreshToken,
+        tokens: activeTokens,
+      },
     };
   }
 
@@ -497,7 +674,7 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     const record = await store.get(id);
     if (!record) return null;
     const raw = record.expiresAt.getTime() > now() ? await sessions.unseal<unknown>(record.data) : null;
-    if (!isValidSessionData(raw)) {
+    if (!isValidSessionData(raw) || raw.expiresAt <= now()) {
       await store.delete(id);
       return null;
     }
@@ -509,21 +686,22 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     id: string,
     data: SessionData,
     resource: string,
+    marginMs: number,
   ): Promise<SessionData | null> {
-    if (isFresh(data, resource)) return data;
+    if (isFresh(data, resource, marginMs)) return data;
     return exclusive(id, async () => {
       // Inne żądanie mogło już odświeżyć tokeny, więc czytamy sesję jeszcze raz.
       const current = await loadStore(store, id);
       if (!current) return null;
-      if (isFresh(current, resource)) return current;
+      if (isFresh(current, resource, marginMs)) return current;
 
-      const next = await requestRefreshedSession(current, resource);
-      if (!next) {
+      const outcome = await requestRefreshedSession(current, resource);
+      if (outcome.status !== "ok") {
         await store.delete(id);
         return null;
       }
-      await saveStore(store, id, next);
-      return next;
+      await saveStore(store, id, outcome.data);
+      return outcome.data;
     });
   }
 
@@ -544,22 +722,79 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
   async function loadCookie(value: string | undefined): Promise<SessionData | null> {
     const data = await unsealCookieRaw(value);
     if (!data || data.expiresAt <= now()) return null;
+    if (data.context.clientId !== options.clientId) return null;
     return data;
+  }
+
+  class CookieSizeExceededError extends Error {
+    constructor(size: number, maxBytes: number) {
+      super(
+        `Zaszyfrowane ciasteczko sesji ma ${size} bajtów i przekracza limit ${maxBytes} bajtów. ` +
+          "Ogranicz listę `resources` albo użyj trybu z bazą danych (`store`).",
+      );
+      this.name = "CookieSizeExceededError";
+    }
   }
 
   async function sealCookie(data: SessionData, maxBytes: number): Promise<string> {
     const sealed = await cookieSessions.seal(data);
     const size = utf8.encode(sealed).byteLength;
-    if (size > maxBytes) {
-      throw new Error(
-        `Zaszyfrowane ciasteczko sesji ma ${size} bajtów i przekracza limit ${maxBytes} bajtów. ` +
-          "Ogranicz listę `resources` albo użyj trybu z bazą danych (`store`).",
-      );
-    }
+    if (size > maxBytes) throw new CookieSizeExceededError(size, maxBytes);
     return sealed;
   }
 
-  function getRecentRefresh(lockKey: string, data: SessionData): RecentCookieRefresh | null {
+  /**
+   * Po rotacji tokenu odświeżania w Core utrata nowego ciasteczka zakończyłaby sesję.
+   * Jeśli pełny zestaw tokenów przekracza limit, przed zgłoszeniem błędu zrzucamy zbędne tokeny innych zasobów
+   * (zostawiając żądany zasób i zasób główny, jeśli oba się mieszczą, a w ostateczności sam żądany zasób).
+   */
+  async function sealRefreshedCookie(
+    next: SessionData,
+    resource: string,
+    maxBytes: number,
+  ): Promise<{ data: SessionData; sealed: string }> {
+    try {
+      return { data: next, sealed: await sealCookie(next, maxBytes) };
+    } catch (error) {
+      if (!(error instanceof CookieSizeExceededError)) throw error;
+    }
+
+    const requestedToken = next.tokens[resource];
+    const primaryToken = next.tokens[primary];
+    const tokenCount = Object.keys(next.tokens).length;
+
+    if (requestedToken && primaryToken && resource !== primary && tokenCount > 2) {
+      const reduced: SessionData = {
+        ...next,
+        tokens: { [primary]: primaryToken, [resource]: requestedToken },
+      };
+      try {
+        return { data: reduced, sealed: await sealCookie(reduced, maxBytes) };
+      } catch (error) {
+        if (!(error instanceof CookieSizeExceededError)) throw error;
+      }
+    }
+
+    if (requestedToken && tokenCount > 1) {
+      const minimal: SessionData = {
+        ...next,
+        tokens: { [resource]: requestedToken },
+      };
+      return { data: minimal, sealed: await sealCookie(minimal, maxBytes) };
+    }
+
+    return { data: next, sealed: await sealCookie(next, maxBytes) };
+  }
+
+  function matchesSessionIdentity(entry: RecentCookieRefresh, data: SessionData): boolean {
+    return (
+      entry.data.context.accountId === data.context.accountId &&
+      entry.data.context.organizationId === data.context.organizationId &&
+      entry.data.createdAt === data.createdAt
+    );
+  }
+
+  function getLatestRefreshForSession(lockKey: string, data: SessionData): RecentCookieRefresh | null {
     const entry = recentRefreshes.get(lockKey);
     if (!entry) return null;
     const currentNow = now();
@@ -567,13 +802,13 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
       recentRefreshes.delete(lockKey);
       return null;
     }
-    if (
-      entry.data.context.accountId !== data.context.accountId ||
-      entry.data.context.organizationId !== data.context.organizationId ||
-      entry.data.createdAt !== data.createdAt
-    ) {
-      return null;
-    }
+    if (!matchesSessionIdentity(entry, data)) return null;
+    return entry;
+  }
+
+  function getRecentRefresh(lockKey: string, data: SessionData): RecentCookieRefresh | null {
+    const entry = getLatestRefreshForSession(lockKey, data);
+    if (!entry) return null;
     if (data.refreshToken !== entry.data.refreshToken && !entry.previousRefreshTokens.has(data.refreshToken)) {
       return null;
     }
@@ -600,43 +835,69 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     maxCookieBytes: number,
     data: SessionData,
     resource: string,
-  ): Promise<{ data: SessionData; setCookie: string | null } | null> {
-    if (isFresh(data, resource)) return { data, setCookie: null };
+    marginMs: number,
+  ): Promise<{ data: SessionData; lockKey: string; setCookie: string | null } | null> {
     const lockKey = await cookieLockKey(data);
+    if (isFresh(data, resource, marginMs)) return { data, lockKey, setCookie: null };
     return exclusive(lockKey, async () => {
       // Jeśli inne równoczesne żądanie w tym samym procesie już odświeżyło tę sesję,
       // używamy jej najnowszego stanu, żeby nie użyć ponownie starego tokenu odświeżania.
       const cached = getRecentRefresh(lockKey, data);
-      if (cached && isFresh(cached.data, resource)) {
+      if (cached && isFresh(cached.data, resource, marginMs)) {
         return {
           data: cached.data,
+          lockKey,
           setCookie: cookie(sessionCookie, cached.sealed, { expires: new Date(cached.data.expiresAt) }),
         };
       }
 
       const current = cached ? cached.data : data;
-      const next = await requestRefreshedSession(current, resource);
-      if (!next) {
+      let outcome = await requestRefreshedSession(current, resource);
+      if (outcome.status === "invalid_grant" && !cached) {
+        // Pokrywa ~5 ms lukę w Core zaraz po rotacji tokenu (zanim odpowiedź ponownego użycia trafi do magazynu).
+        await delay(INVALID_GRANT_RETRY_DELAY_MS);
+        outcome = await requestRefreshedSession(current, resource);
+      }
+      if (outcome.status !== "ok") {
         recentRefreshes.delete(lockKey);
         return null;
       }
 
-      const sealed = await sealCookie(next, maxCookieBytes);
+      const { data: stored, sealed } = await sealRefreshedCookie(outcome.data, resource, maxCookieBytes);
       const previousRefreshTokens = new Set(cached?.previousRefreshTokens);
       previousRefreshTokens.add(current.refreshToken);
       previousRefreshTokens.add(data.refreshToken);
-      rememberRefresh(lockKey, { data: next, sealed, previousRefreshTokens, updatedAt: now() });
+      rememberRefresh(lockKey, { data: stored, sealed, previousRefreshTokens, updatedAt: now() });
 
       return {
-        data: next,
-        setCookie: cookie(sessionCookie, sealed, { expires: new Date(next.expiresAt) }),
+        data: stored,
+        lockKey,
+        setCookie: cookie(sessionCookie, sealed, { expires: new Date(stored.expiresAt) }),
       };
     });
   }
 
   // ── Obiekt Session ───────────────────────────────────────────────────────────────────────────────────
 
-  function toStoreSession(store: SessionStore, id: string, data: SessionData): Session {
+  function toReadOnlySession(data: SessionData): Session {
+    const emptyCookies: readonly string[] = [];
+    return {
+      context: hydrate(data.context),
+      profile: data.profile,
+      expiresAt: new Date(data.expiresAt),
+      setCookies: emptyCookies,
+      async accessToken(resource = primary) {
+        if (!options.resources.includes(resource)) throw new Error(`API ${resource} nie ma na liście resources`);
+        const token = data.tokens[resource];
+        if (!token || token.expiresAt <= now()) {
+          throw new AuthError("UNAUTHENTICATED", "Token dostępu wygasł i wymaga odświeżenia z zapisem ciasteczka");
+        }
+        return token.value;
+      },
+    };
+  }
+
+  function toStoreSession(store: SessionStore, id: string, data: SessionData, marginMs: number): Session {
     let latest = data;
     const emptyCookies: readonly string[] = [];
     return {
@@ -646,7 +907,7 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
       setCookies: emptyCookies,
       async accessToken(resource = primary) {
         if (!options.resources.includes(resource)) throw new Error(`API ${resource} nie ma na liście resources`);
-        const fresh = await ensureFreshStore(store, id, latest, resource);
+        const fresh = await ensureFreshStore(store, id, latest, resource, marginMs);
         const token = fresh?.tokens[resource];
         if (!fresh || !token) throw new AuthError("UNAUTHENTICATED", "Sesja wygasła");
         latest = fresh;
@@ -655,41 +916,85 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     };
   }
 
-  function toCookieSession(maxCookieBytes: number, data: SessionData, initialSetCookie: string | null): Session {
+  function toCookieSession(
+    maxCookieBytes: number,
+    data: SessionData,
+    lockKey: string,
+    initialSetCookie: string | null,
+    marginMs: number,
+  ): Session {
     let latest = data;
-    const pendingCookies: string[] = initialSetCookie ? [initialSetCookie] : [];
+    let currentLockKey = lockKey;
+    let fallbackSetCookie = initialSetCookie;
+    let hasPendingCookie = initialSetCookie !== null;
+
     return {
       context: hydrate(data.context),
       profile: data.profile,
       expiresAt: new Date(data.expiresAt),
-      setCookies: pendingCookies,
+      get setCookies(): readonly string[] {
+        if (!hasPendingCookie) return [];
+        // Zawsze zwracamy najnowsze ciasteczko tej sesji w procesie, żeby późniejsza odpowiedź
+        // nie nadpisała w przeglądarce nowszego obróconego ciasteczka z innego żądania.
+        const newest = getLatestRefreshForSession(currentLockKey, latest);
+        if (newest) {
+          return [cookie(sessionCookie, newest.sealed, { expires: new Date(newest.data.expiresAt) })];
+        }
+        return fallbackSetCookie ? [fallbackSetCookie] : [];
+      },
       async accessToken(resource = primary) {
         if (!options.resources.includes(resource)) throw new Error(`API ${resource} nie ma na liście resources`);
-        const fresh = await ensureFreshCookie(maxCookieBytes, latest, resource);
+        const fresh = await ensureFreshCookie(maxCookieBytes, latest, resource, marginMs);
         const token = fresh?.data.tokens[resource];
         if (!fresh || !token) throw new AuthError("UNAUTHENTICATED", "Sesja wygasła");
         latest = fresh.data;
-        if (fresh.setCookie) pendingCookies.splice(0, pendingCookies.length, fresh.setCookie);
+        currentLockKey = fresh.lockKey;
+        if (fresh.setCookie) {
+          hasPendingCookie = true;
+          fallbackSetCookie = fresh.setCookie;
+        }
         return token.value;
       },
     };
   }
 
-  async function getSessionFromCookie(value: string | undefined): Promise<Session | null> {
+  async function loadSessionFromCookieValue(
+    value: string | undefined,
+    allowRefresh: boolean,
+    marginMs: number,
+  ): Promise<Session | null> {
     if (!value) return null;
     if (mode.kind === "store") {
       const id = await sha256(value);
       const data = await loadStore(mode.store, id);
       if (!data) return null;
+      if (!allowRefresh) {
+        const primaryToken = data.tokens[primary];
+        if (!primaryToken || primaryToken.expiresAt <= now()) return null;
+        return toReadOnlySession(data);
+      }
       // Token API produktu żyje 5 minut, więc co 5 minut Core potwierdza, że konto może dalej pracować.
-      const fresh = await ensureFreshStore(mode.store, id, data, primary);
-      return fresh ? toStoreSession(mode.store, id, fresh) : null;
+      const fresh = await ensureFreshStore(mode.store, id, data, primary, marginMs);
+      return fresh ? toStoreSession(mode.store, id, fresh, marginMs) : null;
     }
 
     const data = await loadCookie(value);
     if (!data) return null;
-    const fresh = await ensureFreshCookie(mode.maxCookieBytes, data, primary);
-    return fresh ? toCookieSession(mode.maxCookieBytes, fresh.data, fresh.setCookie) : null;
+    if (!allowRefresh) {
+      const primaryToken = data.tokens[primary];
+      if (!primaryToken || primaryToken.expiresAt <= now()) return null;
+      return toReadOnlySession(data);
+    }
+    const fresh = await ensureFreshCookie(mode.maxCookieBytes, data, primary, marginMs);
+    return fresh ? toCookieSession(mode.maxCookieBytes, fresh.data, fresh.lockKey, fresh.setCookie, marginMs) : null;
+  }
+
+  async function getSessionFromCookie(
+    value: string | undefined,
+    sessionOptions?: GetSessionOptions,
+  ): Promise<Session | null> {
+    const allowRefresh = sessionOptions?.refresh ?? mode.kind === "store";
+    return loadSessionFromCookieValue(value, allowRefresh, refreshMarginMs);
   }
 
   async function verifyIdToken(idToken: string, nonce: string, accountId: string): Promise<void> {
@@ -702,6 +1007,35 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     if (payload.nonce !== nonce || payload.sub !== accountId) {
       throw new AuthError("UNAUTHENTICATED", "ID token nie pasuje do tego logowania");
     }
+  }
+
+  async function revokePreviousSession(previousCookieValue: string | undefined): Promise<void> {
+    if (!previousCookieValue) return;
+    if (mode.kind === "store") {
+      const previousId = await sha256(previousCookieValue);
+      const previousData = await loadStore(mode.store, previousId);
+      await mode.store.delete(previousId);
+      if (previousData && previousData.expiresAt > now()) {
+        await revokeToken({ ...client, token: previousData.refreshToken, hint: "refresh_token" }).catch(
+          () => undefined,
+        );
+      }
+      return;
+    }
+
+    const previousData = await loadCookie(previousCookieValue);
+    if (previousData) {
+      const lockKey = await cookieLockKey(previousData);
+      const cached = getRecentRefresh(lockKey, previousData);
+      recentRefreshes.delete(lockKey);
+      const tokenToRevoke = cached ? cached.data.refreshToken : previousData.refreshToken;
+      await revokeToken({ ...client, token: tokenToRevoke, hint: "refresh_token" }).catch(() => undefined);
+      return;
+    }
+
+    // Jeśli ciasteczko wygasło, nie wywołujemy /revoke w Core, ale sprzątamy ewentualny stary wpis w pamięci.
+    const expiredRaw = await unsealCookieRaw(previousCookieValue);
+    if (expiredRaw) recentRefreshes.delete(await cookieLockKey(expiredRaw));
   }
 
   // ── Trasy ────────────────────────────────────────────────────────────────────────────────────────────
@@ -745,6 +1079,10 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     const code = query.get("code");
     if (!code) return fail("failed");
 
+    // Poprzednią sesję unieważniamy PRZED `exchangeCode()`: jeśli jej token był już obrócony, Core czyści
+    // całą rodzinę (clientId, userId), więc musi to nastąpić zanim wyda nowy token dla nowej sesji.
+    await revokePreviousSession(readCookie(request, sessionCookie));
+
     let tokens: TokenResponse;
     try {
       tokens = await exchangeCode({
@@ -787,10 +1125,7 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
       expiresAt: issuedAt + maxAgeMs,
     };
 
-    const previous = readCookie(request, sessionCookie);
     if (mode.kind === "store") {
-      // Poprzednia sesja z tej przeglądarki znika (ochrona przed utrwaleniem sesji).
-      if (previous) await mode.store.delete(await sha256(previous));
       const sessionId = randomToken(32);
       await saveStore(mode.store, await sha256(sessionId), data);
 
@@ -808,18 +1143,6 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
       throw error;
     }
 
-    // Poprzednią sesję z tej przeglądarki usuwamy z pamięci podręcznej i unieważniamy jej token odświeżania w Core.
-    if (previous) {
-      const previousData = await unsealCookieRaw(previous);
-      if (previousData) {
-        const lockKey = await cookieLockKey(previousData);
-        const cached = getRecentRefresh(lockKey, previousData);
-        recentRefreshes.delete(lockKey);
-        const tokenToRevoke = cached ? cached.data.refreshToken : previousData.refreshToken;
-        await revokeToken({ ...client, token: tokenToRevoke, hint: "refresh_token" }).catch(() => undefined);
-      }
-    }
-
     return redirect(new URL(transaction.returnTo, appOrigin).toString(), [
       clear,
       cookie(sessionCookie, sealed, { expires: new Date(data.expiresAt) }),
@@ -829,26 +1152,7 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
   async function signOut(request: Request): Promise<Response> {
     if (request.method.toUpperCase() !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
     if (!fromApp(request)) return new Response(null, { status: 403 });
-    const value = readCookie(request, sessionCookie);
-    if (value) {
-      if (mode.kind === "store") {
-        const id = await sha256(value);
-        const data = await loadStore(mode.store, id);
-        await mode.store.delete(id);
-        if (data) {
-          await revokeToken({ ...client, token: data.refreshToken, hint: "refresh_token" }).catch(() => undefined);
-        }
-      } else {
-        const data = await unsealCookieRaw(value);
-        if (data) {
-          const lockKey = await cookieLockKey(data);
-          const cached = getRecentRefresh(lockKey, data);
-          recentRefreshes.delete(lockKey);
-          const tokenToRevoke = cached ? cached.data.refreshToken : data.refreshToken;
-          await revokeToken({ ...client, token: tokenToRevoke, hint: "refresh_token" }).catch(() => undefined);
-        }
-      }
-    }
+    await revokePreviousSession(readCookie(request, sessionCookie));
     return redirect(
       new URL(options.afterSignOut ?? "/", appOrigin).toString(),
       [cookie(sessionCookie, "", { maxAge: 0 })],
@@ -857,26 +1161,71 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
   }
 
   async function authenticate(request: Request): Promise<Authenticated> {
-    const token = bearerToken(request.headers.get("authorization"));
-    if (token) return { context: await verifierFor(primary)(token), via: "bearer", session: null, setCookies: [] };
+    const authHeader = request.headers.get("authorization");
+    if (authHeader !== null && authHeader.trim().length > 0) {
+      const token = bearerToken(authHeader);
+      if (!token) throw new AuthError("UNAUTHENTICATED", "Nieprawidłowy nagłówek Authorization");
+      return { context: await verifierFor(primary)(token), via: "bearer", session: null, setCookies: [] };
+    }
 
     const value = readCookie(request, sessionCookie);
     if (!value) throw new AuthError("UNAUTHENTICATED", "Brak sesji");
     if (!SAFE_METHODS.has(request.method.toUpperCase()) && !fromApp(request)) {
       throw new AuthError("PERMISSION_DENIED", "Żądanie spoza aplikacji");
     }
-    const session = await getSessionFromCookie(value);
+    const session = await loadSessionFromCookieValue(value, true, refreshMarginMs);
     if (!session) throw new AuthError("UNAUTHENTICATED", "Sesja wygasła albo nie istnieje");
-    return { context: session.context, via: "session", session, setCookies: session.setCookies };
+    return {
+      context: session.context,
+      via: "session",
+      session,
+      get setCookies() {
+        return session.setCookies;
+      },
+    };
+  }
+
+  async function withAuth(
+    request: Request,
+    handler: (auth: Authenticated) => Response | Promise<Response>,
+    withAuthOptions?: WithAuthOptions,
+  ): Promise<Response> {
+    let authenticated: Authenticated | undefined;
+    try {
+      authenticated = await authenticate(request);
+      const response = await handler(authenticated);
+      return applySessionCookies(response, authenticated);
+    } catch (error) {
+      if (withAuthOptions?.onError) {
+        const errorResponse = await withAuthOptions.onError(error, request);
+        return applySessionCookies(errorResponse, authenticated);
+      }
+      if (error instanceof AuthError) {
+        const errorResponse = Response.json(
+          { data: null, meta: {}, error: { code: error.code, message: error.message } },
+          { status: error.statusCode },
+        );
+        return applySessionCookies(errorResponse, authenticated);
+      }
+      if (error instanceof AuthUnavailableError) {
+        const errorResponse = Response.json(
+          { data: null, meta: {}, error: { code: "INTERNAL", message: error.message } },
+          { status: error.statusCode },
+        );
+        return applySessionCookies(errorResponse, authenticated);
+      }
+      throw error;
+    }
   }
 
   return {
     signIn,
     callback,
     signOut,
-    getSession: (request) => getSessionFromCookie(readCookie(request, sessionCookie)),
+    getSession: (request) => loadSessionFromCookieValue(readCookie(request, sessionCookie), true, proxyRefreshMarginMs),
     getSessionFromCookie,
     authenticate,
+    withAuth,
     cookieName: sessionCookie,
     mode: mode.kind,
   };
