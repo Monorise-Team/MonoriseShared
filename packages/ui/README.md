@@ -87,3 +87,33 @@ const id = toast({
 - **Okno wprowadzania (`InputDialog`)**: okno oparte na `Dialog` z pojedynczym polem, fokusem i zaznaczeniem tekstu przy otwarciu, zatwierdzaniem klawiszem `Enter` i walidacją (`validate`).
 - **Wybór daty i godziny (`DateTimePickerDialog`)**: szybkie podpowiedzi („Później dzisiaj”, „Jutro rano”, „W ten weekend”, „W przyszłym tygodniu”) oraz pola daty i godziny zwracające `Date`, z polskimi etykietami `pl-PL` i możliwością ich nadpisania.
 - **Granica błędu (`ErrorBoundary`)**: przechwytuje błędy renderowania i wyświetla szklaną kartę z przyciskiem „Spróbuj ponownie”, opcjonalnym rozwinięciem szczegółów, wywołaniem `onError` i własnym `fallback`.
+
+## Szkielet aplikacji i ustawienia
+
+- `SidebarShell`, `SidebarCollapseButton`, `SidebarAccordion`: zwijany pasek boczny (`w-60` ↔ `w-16`, automatycznie zwijany poniżej 760 px z ukryciem przycisku zwijania), sekcje z animacją `grid-rows-[0fr]` / `grid-rows-[1fr]` i skracaniem listy do pierwszych `N` pozycji przyciskiem „Pokaż więcej”. Zwinięte `SidebarItem` i `SidebarLink` zachowują etykietę dla czytników ekranu i pokazują ją w dymku.
+- `ResizableSplitPane`: dwa panele rozdzielone uchwytem w przerwie `--mr-card-gap` (`10 px`), z obsługą myszy, klawiatury (±16 px), podwójnego kliknięcia (reset), limitów oraz opcjonalnym zapisem w `localStorage` (`storageKey`). Obsługuje `orientation="horizontal"` i `"vertical"`.
+- `TitleBar` (`title`) i `WindowControls`: wyśrodkowany tytuł na środku paska tytułu oraz przyciski okna (`46 px`) dla `platform="windows" | "linux"` (na `"mac"` nie renderują się).
+- `SettingsLayout`, `SettingSection`, `SettingRow`, `SettingToggleRow`: układ ustawień oparty o `@container` (pionowa nawigacja `w-48` przełącza się w CSS poniżej 640 px na poziomy pasek) oraz wiersze z etykietą, opisem i `Switch`.
+- `AppearanceControls`: gotowy zestaw kontrolek oparty o `useTheme()` (karty 4 motywów, tryb Jasny/Ciemny/System, tło Zdjęcie/Gradient, przyciemnienie 0–80%, rozmycie 0–24 px, skala tekstu, gęstość, ruch i szkło) z domyślnymi polskimi napisami i możliwością nadpisania przez `labels`.
+
+```tsx
+<AppShell
+  titleBar={
+    <TitleBar title="Acme · Poczta">
+      <WindowControls platform="windows" onMinimize={onMin} onMaximize={onMax} onClose={onClose} />
+    </TitleBar>
+  }
+>
+  <SidebarShell footer={<SidebarCollapseButton />}>
+    <SidebarNav>
+      <SidebarItem icon={<Inbox />} label="Odebrane" count={3} active />
+      <SidebarAccordion title="Etykiety" visibleCount={2}>
+        <SidebarItem icon={<Tag />} label="Klienci" />
+        <SidebarItem icon={<Tag />} label="Faktury" />
+        <SidebarItem icon={<Tag />} label="Zespół" />
+      </SidebarAccordion>
+    </SidebarNav>
+  </SidebarShell>
+  <ResizableSplitPane storageKey="mail-split" primary={<ListCard />} secondary={<ReadingCard />} />
+</AppShell>
+```

@@ -117,3 +117,32 @@ export {
   type DateTimePresetLabels,
 } from "./components/DateTimePickerDialog.js";
 export { ErrorBoundary, type ErrorBoundaryProps } from "./components/ErrorBoundary.js";
+// Szkielet aplikacji i ustawienia (MonoriseShared#52)
+export {
+  AppearanceControls,
+  defaultAppearanceLabels,
+  type AppearanceControlsLabels,
+  type AppearanceControlsProps,
+} from "./components/AppearanceControls.js";
+export { WindowControls, type WindowControlsProps, type WindowPlatform } from "./components/Layout.js";
+export {
+  SettingRow,
+  SettingSection,
+  SettingToggleRow,
+  SettingsLayout,
+  type SettingRowProps,
+  type SettingSectionProps,
+  type SettingToggleRowProps,
+  type SettingsLayoutProps,
+  type SettingsNavItem,
+} from "./components/Settings.js";
+export {
+  SidebarAccordion,
+  SidebarCollapseButton,
+  SidebarShell,
+  useSidebar,
+  type SidebarAccordionProps,
+  type SidebarCollapseButtonProps,
+  type SidebarShellProps,
+} from "./components/Sidebar.js";
+export { ResizableSplitPane, type ResizableSplitPaneProps } from "./components/SplitPane.js";
