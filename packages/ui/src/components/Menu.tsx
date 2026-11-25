@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../lib/cn.js";
@@ -10,6 +10,7 @@ import { Kbd } from "./Kbd.js";
 export const Menu = DropdownMenu.Root;
 export const MenuTrigger = DropdownMenu.Trigger;
 export const MenuGroup = DropdownMenu.Group;
+export const MenuSub = DropdownMenu.Sub;
 
 export function MenuContent({ className, sideOffset = 6, ...rest }: ComponentProps<typeof DropdownMenu.Content>) {
   return (
@@ -69,4 +70,39 @@ export function MenuLabel({ className, ...rest }: ComponentProps<typeof Dropdown
 
 export function MenuSeparator({ className, ...rest }: ComponentProps<typeof DropdownMenu.Separator>) {
   return <DropdownMenu.Separator className={cn("my-1 h-px bg-border-secondary", className)} {...rest} />;
+}
+
+export interface MenuSubTriggerProps extends ComponentProps<typeof DropdownMenu.SubTrigger> {
+  icon?: ReactNode;
+}
+
+export function MenuSubTrigger({ icon, className, children, ...rest }: MenuSubTriggerProps) {
+  return (
+    <DropdownMenu.SubTrigger className={cn(itemClass, "data-[state=open]:bg-bg-hover", className)} {...rest}>
+      {icon}
+      <span className="flex-1 truncate">{children}</span>
+      <ChevronRight aria-hidden className="ml-auto shrink-0" />
+    </DropdownMenu.SubTrigger>
+  );
+}
+
+export function MenuSubContent({
+  className,
+  sideOffset = 4,
+  collisionPadding = 4,
+  ...rest
+}: ComponentProps<typeof DropdownMenu.SubContent>) {
+  return (
+    <DropdownMenu.Portal>
+      <DropdownMenu.SubContent
+        sideOffset={sideOffset}
+        collisionPadding={collisionPadding}
+        className={cn(
+          "mr-menu mr-animate-menu z-[var(--mr-z-dropdown)] min-w-44 p-1 text-sm text-text-primary outline-none",
+          className,
+        )}
+        {...rest}
+      />
+    </DropdownMenu.Portal>
+  );
 }

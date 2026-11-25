@@ -42,3 +42,48 @@ Ustawienia zapisują się w `localStorage` pod kluczem `monorise-appearance` (st
 Paczka zawiera cztery tapety doliny odpowiadające motywom (`@monorise-team/ui/wallpapers/{mono,moonlight,amethyst,emerald}.jpg`). W trybie jasnym zdjęcie jest wypłowione do pastelu pod jasnym szkłem, a w trybie ciemnym ma delikatne przyciemnienie nad księżycem i paskiem tytułu.
 
 Zdjęcia doliny pochodzą z projektu `aven-mail` właściciela i mogą być używane przez aplikacje Monorise (zdjęcia: Monorise Team).
+
+## Okna i powiadomienia
+
+Komponenty nakładek i powiadomień renderują się w portalu na `document.body` i korzystają ze skali warstw `--mr-z-*` oraz szklanych powierzchni `.mr-menu` i `.mr-float`:
+
+- **Menu kontekstowe (`ContextMenu`) i podmenu (`MenuSub`)**: otwierane prawym przyciskiem myszy w miejscu kursora, z ikonami, skrótami (`Kbd`), wariantem `danger`, polami wyboru oraz zagnieżdżonymi podmenu (dostępnymi także w `Menu` przez `MenuSub`, `MenuSubTrigger`, `MenuSubContent`).
+
+```tsx
+<ContextMenu>
+  <ContextMenuTrigger asChild>
+    <ListItem title="Anna Kowalska" subtitle="Faktura za listopad" />
+  </ContextMenuTrigger>
+  <ContextMenuContent>
+    <ContextMenuItem icon={<Star />} shortcut="S" onSelect={onStar}>
+      Oznacz gwiazdką
+    </ContextMenuItem>
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>Etykieta</ContextMenuSubTrigger>
+      <ContextMenuSubContent>
+        <ContextMenuItem onSelect={onLabel}>Faktury</ContextMenuItem>
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+    <ContextMenuSeparator />
+    <ContextMenuItem danger onSelect={onDelete}>
+      Usuń
+    </ContextMenuItem>
+  </ContextMenuContent>
+</ContextMenu>
+```
+
+- **Powiadomienia (`ToastProvider`, `useToast`)**: pływające komunikaty w prawym dolnym rogu (`position="bottom-right"`) albo na dole pośrodku (`position="bottom-center"`), z tonami `neutral | success | warning | danger`, akcją i opcjonalnym paskiem odliczania (`progress: true`).
+
+```tsx
+const { toast, dismiss } = useToast();
+const id = toast({
+  title: "Wysyłanie wiadomości…",
+  progress: true,
+  action: { label: "Cofnij", onClick: () => dismiss(id) },
+});
+```
+
+- **Baner (`Banner`)**: wbudowany pasek statusu z ikoną, treścią, opcjonalnym przyciskiem działania i przyciskiem zamknięcia (`role="alert"` dla `warning` i `danger`, `role="status"` dla pozostałych).
+- **Okno wprowadzania (`InputDialog`)**: okno oparte na `Dialog` z pojedynczym polem, fokusem i zaznaczeniem tekstu przy otwarciu, zatwierdzaniem klawiszem `Enter` i walidacją (`validate`).
+- **Wybór daty i godziny (`DateTimePickerDialog`)**: szybkie podpowiedzi („Później dzisiaj”, „Jutro rano”, „W ten weekend”, „W przyszłym tygodniu”) oraz pola daty i godziny zwracające `Date`, z polskimi etykietami `pl-PL` i możliwością ich nadpisania.
+- **Granica błędu (`ErrorBoundary`)**: przechwytuje błędy renderowania i wyświetla szklaną kartę z przyciskiem „Spróbuj ponownie”, opcjonalnym rozwinięciem szczegółów, wywołaniem `onError` i własnym `fallback`.
