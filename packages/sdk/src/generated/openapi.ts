@@ -113,6 +113,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/core/v1/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista zaproszeń pracowników firmy
+         * @description Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`), opcjonalnie filtrowaną statusem. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Zaproś pracownika e-mailem
+         * @description Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), generuje jednorazowy link aktywacyjny ważny 7 dni i wysyła wiadomość e-mail (ADR-0021). Adres musi należeć do zweryfikowanej domeny firmy. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cofnij oczekujące zaproszenie
+         * @description Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` (konto pozostaje w statusie `INVITED`, a zaproszenie można później wysłać ponownie). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        delete: operations["revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/invitations/{invitationId}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wyślij ponownie zaproszenie pracownika
+         * @description Generuje nowy 7-dniowy link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED` (unieważnia poprzedni link), ustawia status `PENDING` i wysyła nowy e-mail. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        post: operations["resendInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/core/v1/me": {
         parameters: {
             query?: never;
@@ -567,6 +631,14 @@ export interface components {
             /** Format: email */
             workEmail?: string;
         };
+        CreateInvitation: {
+            /** Format: email */
+            email: string;
+            /** Format: uuid */
+            employeeId?: string;
+            firstName?: string;
+            lastName?: string;
+        };
         CreateRole: components["schemas"]["CreateRoleFromScratch"] | components["schemas"]["CopyRole"];
         CreateRoleAssignment: {
             /** Format: uuid */
@@ -692,6 +764,34 @@ export interface components {
             error: null;
             meta: components["schemas"]["ApiMeta"];
         };
+        Invitation: {
+            acceptedAt: string | null;
+            /** Format: uuid */
+            accountId: string;
+            createdAt: string;
+            email: string;
+            /** Format: uuid */
+            employeeId: string;
+            expiresAt: string;
+            /** Format: uuid */
+            id: string;
+            invitedByAccountId: string | null;
+            status: components["schemas"]["InvitationStatus"];
+            updatedAt: string;
+        };
+        InvitationList: components["schemas"]["Invitation"][];
+        InvitationListResponse: {
+            data: components["schemas"]["InvitationList"];
+            error: null;
+            meta: components["schemas"]["ApiListMeta"];
+        };
+        InvitationResponse: {
+            data: components["schemas"]["Invitation"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
+        /** @enum {string} */
+        InvitationStatus: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
         Me: {
             account: {
                 email: string;
@@ -1355,6 +1455,300 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: {
+                /** @description Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`. */
+                cursor?: string;
+                /** @description Liczba elementów na stronie (1–100, domyślnie 50). */
+                limit?: number;
+                /** @description Opcjonalny filtr statusu zaproszenia (`PENDING`, `ACCEPTED`, `EXPIRED` albo `REVOKED`). */
+                status?: components["schemas"]["InvitationStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strona listy zaproszeń pracowników firmy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationListResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Adres e-mail oraz imię i nazwisko albo identyfikator istniejącego pracownika bez konta. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitation"];
+            };
+        };
+        responses: {
+            /** @description Utworzone zaproszenie (bez tokenu aktywacyjnego). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identyfikator zaproszenia pracownika (UUID v7). */
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Zaproszenie zostało cofnięte. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    resendInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identyfikator zaproszenia pracownika (UUID v7). */
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Wewnętrzny błąd serwera (INTERNAL). */

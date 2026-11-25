@@ -11,6 +11,7 @@ import {
   type DirectoryEmployee,
   type FetchFunction,
   type Health,
+  type Invitation,
   type Me,
   type OpenApiDocument,
   type Organization,
@@ -320,6 +321,58 @@ describe("createCoreClient", () => {
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
       `http://localhost:3200/core/v1/products/timotime/directory/unit-members?organizationId=${ORG_ID}&unitId=${KRAKOW_UNIT_ID}&unitId=${TEAM_A_UNIT_ID}&limit=50`,
     );
+  });
+
+  it("lists, creates, resends and revokes employee invitations", async () => {
+    const invitation: Invitation = {
+      id: "01936f4e-4000-7000-8000-000000000001",
+      accountId: JAN_ACCOUNT_ID,
+      employeeId: "01936f4e-9b2c-7d4e-8f5a-222222222222",
+      email: "jan@acme.test",
+      status: "PENDING",
+      expiresAt: "2026-12-02T10:00:00.000Z",
+      invitedByAccountId: ANNA_ACCOUNT_ID,
+      acceptedAt: null,
+      createdAt: "2026-11-25T10:00:00.000Z",
+      updatedAt: "2026-11-25T10:00:00.000Z",
+    };
+    const responses = [
+      jsonResponse({ data: [invitation], meta: { requestId: "req_1", nextCursor: "next-page" }, error: null }),
+      jsonResponse({ data: invitation, meta: { requestId: "req_2" }, error: null }, 201),
+      jsonResponse({ data: invitation, meta: { requestId: "req_3" }, error: null }),
+      new Response(null, { status: 204 }),
+    ];
+    const fetchMock = vi.fn<FetchFunction>(async () => responses.shift()!);
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => SECRET_TOKEN,
+      fetch: fetchMock,
+    });
+
+    // Anna (Owner) widzi oczekujące zaproszenia, zaprasza Jana, wysyła ponownie i cofa
+    const page = await core.listInvitations({ query: { status: "PENDING", limit: 20 } });
+    expect(page).toEqual({ items: [invitation], nextCursor: "next-page" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:3200/core/v1/invitations?status=PENDING&limit=20");
+
+    const created = await core.createInvitation({
+      body: { email: "jan@acme.test", firstName: "Jan", lastName: "Nowak" },
+    });
+    expect(created).toEqual(invitation);
+    expect(fetchMock.mock.calls[1]?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      email: "jan@acme.test",
+      firstName: "Jan",
+      lastName: "Nowak",
+    });
+
+    const resent = await core.resendInvitation({ path: { invitationId: invitation.id } });
+    expect(resent).toEqual(invitation);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(`http://localhost:3200/core/v1/invitations/${invitation.id}/resend`);
+
+    const revoked = await core.revokeInvitation({ path: { invitationId: invitation.id } });
+    expect(revoked).toBeUndefined();
+    expect(fetchMock.mock.calls[3]?.[0]).toBe(`http://localhost:3200/core/v1/invitations/${invitation.id}`);
+    expect(fetchMock.mock.calls[3]?.[1]?.method).toBe("DELETE");
   });
 
   it("handles 204 No Content for revokeAppAccess and deleteRoleAssignment", async () => {
