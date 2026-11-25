@@ -5,6 +5,8 @@ export {
   type CoreClient,
   type CoreClientOptions,
   type CoreRequestOptions,
+  type CoreRetryConfig,
+  type CoreRetryOption,
   type FetchFunction,
   type OperationInput,
   type OperationResult,
