@@ -693,6 +693,7 @@ export interface components {
         DomainStatus: "PENDING" | "VERIFIED" | "FAILED" | "REVOKED";
         Employee: {
             accountId: string | null;
+            accountStatus: components["schemas"]["AccountStatus"] | null;
             firstName: string;
             /** Format: uuid */
             id: string;
