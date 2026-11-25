@@ -157,8 +157,8 @@ export interface WithAuthOptions {
   /**
    * Zamienia błąd rzucony przez `authenticate()` albo przez `handler` na odpowiedź HTTP
    * (np. własny format błędów). Do zwróconej odpowiedzi również trafią odświeżone ciasteczka sesji.
-   * Domyślnie `AuthError` (401/403) i `AuthUnavailableError` (503) są zamieniane na kopertę JSON
-   * `{ data: null, meta: {}, error }`, a pozostałe błędy są rzucane dalej.
+   * Domyślnie `AuthError` (401/403) i `AuthUnavailableError` (503, kod `INTERNAL`) są zamieniane na kopertę JSON
+   * `{ data: null, meta: { requestId }, error: { code, message, details: [] } }`, a pozostałe błędy są rzucane dalej.
    */
   onError?: (error: unknown, request: Request) => Response | Promise<Response>;
 }
@@ -1185,6 +1185,16 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
     };
   }
 
+  /** Standardowa koperta błędu API Monorise (ADR-0044): `requestId` z nagłówka `x-request-id` albo nowy. */
+  function errorEnvelope(request: Request, status: number, code: string, message: string): Response {
+    const incoming = request.headers.get("x-request-id");
+    const requestId = incoming && /^[\w-]{1,64}$/.test(incoming) ? incoming : `req_${randomToken(8)}`;
+    return Response.json(
+      { data: null, meta: { requestId }, error: { code, message, details: [] } },
+      { status, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   async function withAuth(
     request: Request,
     handler: (auth: Authenticated) => Response | Promise<Response>,
@@ -1201,18 +1211,10 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
         return applySessionCookies(errorResponse, authenticated);
       }
       if (error instanceof AuthError) {
-        const errorResponse = Response.json(
-          { data: null, meta: {}, error: { code: error.code, message: error.message } },
-          { status: error.statusCode },
-        );
-        return applySessionCookies(errorResponse, authenticated);
+        return applySessionCookies(errorEnvelope(request, error.statusCode, error.code, error.message), authenticated);
       }
       if (error instanceof AuthUnavailableError) {
-        const errorResponse = Response.json(
-          { data: null, meta: {}, error: { code: "INTERNAL", message: error.message } },
-          { status: error.statusCode },
-        );
-        return applySessionCookies(errorResponse, authenticated);
+        return applySessionCookies(errorEnvelope(request, error.statusCode, "INTERNAL", error.message), authenticated);
       }
       throw error;
     }
