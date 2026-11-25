@@ -179,11 +179,11 @@ const poller = createEventFeedPoller({
       });
     },
   },
-  // Operacja listProductEvents pojawi się w @monorise-team/sdk po wdrożeniu kanału w Core.
+  // Token serwerowy z zakresem core:events.read; kursor w Core to numer ostatnio przetworzonego zdarzenia.
   fetchPage: (after, limit) =>
     core.listProductEvents({
       path: { productKey: "timotime" },
-      query: { after, limit },
+      query: { ...(after ? { cursor: after } : {}), limit },
     }),
   onError: (error) => {
     logger.error({ error }, "Core event feed poll failed");
