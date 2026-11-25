@@ -37,10 +37,10 @@ export function Dialog({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="mr-overlay mr-animate-overlay fixed inset-0 z-50" />
+        <DialogPrimitive.Overlay className="mr-overlay mr-animate-overlay fixed inset-0 z-[var(--mr-z-overlay)]" />
         <DialogPrimitive.Content
           className={cn(
-            "mr-float mr-animate-panel fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl text-text-primary outline-none",
+            "mr-float mr-animate-panel fixed top-1/2 left-1/2 z-[var(--mr-z-modal)] flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl text-text-primary outline-none",
             className,
           )}
         >

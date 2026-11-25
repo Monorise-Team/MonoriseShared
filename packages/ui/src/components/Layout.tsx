@@ -1,9 +1,71 @@
-import type { HTMLAttributes, ReactNode, Ref } from "react";
-import { cn } from "../lib/cn.js";
+"use client";
 
-/** Tło pod szklanymi kartami, pod całym widokiem. */
-export function AppBackdrop({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden className={cn("mr-backdrop", className)} {...rest} />;
+import type { ThemeName } from "@monorise-team/tokens";
+import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from "react";
+import { WALLPAPER_BLUR_MAX, WALLPAPER_DIM_MAX, type BackdropMode } from "../lib/appearance.js";
+import { cn } from "../lib/cn.js";
+import { useTheme } from "../lib/ThemeProvider.js";
+
+/** Ścieżki do wbudowanych tapet doliny dla każdego motywu (z projektu aven-mail). */
+export const WALLPAPER_URLS: Record<ThemeName, string> = {
+  moonlight: new URL("../../assets/wallpapers/moonlight.jpg", import.meta.url).href,
+  amethyst: new URL("../../assets/wallpapers/amethyst.jpg", import.meta.url).href,
+  emerald: new URL("../../assets/wallpapers/emerald.jpg", import.meta.url).href,
+  mono: new URL("../../assets/wallpapers/mono.jpg", import.meta.url).href,
+};
+
+export interface AppBackdropProps extends HTMLAttributes<HTMLDivElement> {
+  /** Rodzaj tła: tapeta motywu (domyślnie) albo zastępczy gradient CSS. */
+  backdrop?: BackdropMode;
+  /** Motyw tapety; domyślnie pobierany z ThemeProvider. */
+  theme?: ThemeName;
+  /** Przyciemnienie albo rozjaśnienie tapety w procentach (0–80). */
+  dim?: number;
+  /** Rozmycie tapety w pikselach (0–24). */
+  blur?: number;
+}
+
+function clamp(value: number, max: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(max, Math.round(value)));
+}
+
+/** Tło pod szklanymi kartami, pod całym widokiem: tapeta motywu z gradientem w tle podczas ładowania. */
+export function AppBackdrop({ backdrop, theme, dim, blur, className, style, ...rest }: AppBackdropProps) {
+  const { appearance } = useTheme();
+  const activeBackdrop = backdrop ?? appearance.backdrop;
+  const activeTheme = theme ?? appearance.theme;
+  const activeDim = clamp(dim ?? appearance.wallpaperDim, WALLPAPER_DIM_MAX);
+  const activeBlur = clamp(blur ?? appearance.wallpaperBlur, WALLPAPER_BLUR_MAX);
+  const isGradient = activeBackdrop === "gradient";
+
+  const backdropVars: CSSProperties | undefined =
+    activeDim > 0 || activeBlur > 0
+      ? ({
+          "--mr-wallpaper-dim": activeDim / 100,
+          "--mr-wallpaper-blur": `${activeBlur}px`,
+          ...style,
+        } as CSSProperties)
+      : style;
+
+  return (
+    <div
+      aria-hidden
+      data-backdrop={activeBackdrop}
+      data-wallpaper={activeTheme}
+      className={cn("mr-backdrop", isGradient && "mr-backdrop-gradient", className)}
+      style={backdropVars}
+      {...rest}
+    >
+      {!isGradient ? (
+        <div
+          className={cn("mr-backdrop-image", activeBlur > 0 && "is-blurred")}
+          style={{ backgroundImage: `url("${WALLPAPER_URLS[activeTheme]}")` }}
+        />
+      ) : null}
+      {activeDim > 0 ? <div className="mr-backdrop-dim" /> : null}
+    </div>
+  );
 }
 
 export interface AppShellProps extends HTMLAttributes<HTMLDivElement> {
