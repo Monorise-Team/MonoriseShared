@@ -14,7 +14,7 @@ Wszystkie metody pochodzą bezpośrednio z `openapi/core-api.json` (etapy 1–3 
 - **Struktura firmy**: `listUnits`, `createUnit`, `updateUnit`, `listUnitMembers`, `putUnitMember`, `deleteUnitMember`
 - **Uprawnienia i role**: `listPermissions`, `listRoles`, `getRole`, `createRole`, `updateRole`, `archiveRole`, `listRoleAssignments`, `createRoleAssignment`, `deleteRoleAssignment`
 - **Dostęp do aplikacji**: `listEntitlements`, `listAppAccess`, `grantAppAccess`, `revokeAppAccess`
-- **Produkty (token maszynowy OAuth 2.1 `client_credentials`)**: `registerProductPermissions`, `registerProductRoleTemplates`, `getProductPermissionSnapshot`, `listProductDirectoryEmployees`, `listProductDirectoryUnitMembers`
+- **Produkty (token maszynowy OAuth 2.1 `client_credentials`)**: `registerProductPermissions`, `registerProductRoleTemplates`, `getProductPermissionSnapshot`, `listProductDirectoryEmployees`, `listProductDirectoryUnitMembers`, `listProductEvents` (kanał zdarzeń Core, zakres `core:events.read`, ADR-0100; kursor to numer ostatnio przetworzonego zdarzenia, a pobiera go `createEventFeedPoller` z `@monorise-team/events`)
 
 ## Przykład: dane zalogowanego konta i firmy
 

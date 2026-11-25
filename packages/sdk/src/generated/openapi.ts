@@ -317,6 +317,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/core/v1/products/{productKey}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Kanał zdarzeń Core dla serwera produktu
+         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:events.read`). Zwraca wysłane zdarzenia Core (koperta `@monorise-team/events` z numerem `sequence`) w rosnącej kolejności numerów, wyłącznie dla firm z aktywnym dostępem do produktu. Produkt zapamiętuje numer ostatnio przetworzonego zdarzenia i pyta o kolejne (`cursor`). `meta.nextCursor` to numer ostatniego zdarzenia, gdy strona jest pełna, a `null`, gdy produkt jest na bieżąco. Rozwiązanie do czasu EventBridge i SQS (ADR-0045).
+         */
+        get: operations["listProductEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/core/v1/products/{productKey}/permission-snapshot": {
         parameters: {
             query?: never;
@@ -895,6 +915,29 @@ export interface components {
             data: components["schemas"]["PermissionSnapshot"];
             error: null;
             meta: components["schemas"]["ApiMeta"];
+        };
+        ProductEventList: {
+            data: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            id: string;
+            occurredAt: string;
+            /** Format: uuid */
+            organizationId: string;
+            resourceId: string;
+            resourceType: string;
+            resourceVersion: number;
+            sequence: string;
+            /** @constant */
+            source: "core";
+            type: string;
+            version: number;
+        }[];
+        ProductEventListResponse: {
+            data: components["schemas"]["ProductEventList"];
+            error: null;
+            meta: components["schemas"]["ApiListMeta"];
         };
         ProductKey: string;
         PutUnitMember: {
@@ -2108,6 +2151,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectoryUnitMemberListResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listProductEvents: {
+        parameters: {
+            query?: {
+                /** @description Numer ostatnio przetworzonego zdarzenia (wyłącznie, jawny, nie nieprzezroczysty); brak albo `0` = od początku kanału. */
+                cursor?: string;
+                /** @description Liczba zdarzeń na stronie (1–500, domyślnie 100). */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`). */
+                productKey: components["schemas"]["ProductKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strona kanału zdarzeń produktu. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductEventListResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED). */

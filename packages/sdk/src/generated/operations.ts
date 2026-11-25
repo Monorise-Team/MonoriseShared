@@ -285,6 +285,18 @@ export const CORE_OPERATIONS = {
     noContent: false,
     paginated: true,
   },
+  listProductEvents: {
+    operationId: "listProductEvents",
+    method: "GET",
+    path: "/core/v1/products/{productKey}/events",
+    pathParams: ["productKey"],
+    queryParams: ["cursor","limit"],
+    hasBody: false,
+    requiresAuth: true,
+    enveloped: true,
+    noContent: false,
+    paginated: true,
+  },
   listRoleAssignments: {
     operationId: "listRoleAssignments",
     method: "GET",
