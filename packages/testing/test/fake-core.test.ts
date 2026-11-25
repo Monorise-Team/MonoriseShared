@@ -8,7 +8,9 @@ import {
   CORE_DIRECTORY_READ_SCOPE,
   CORE_PERMISSIONS_READ_SCOPE,
   CORE_PERMISSIONS_REGISTER_SCOPE,
+  checkErrorEnvelope,
   createFakeCore,
+  type FakeCoreOperation,
 } from "../src/index.js";
 
 const ISSUER = "https://auth.core.test";
@@ -614,5 +616,309 @@ describe("createFakeCore — katalog (stronicowanie, filtry), rejestracja manife
     } finally {
       await server.close();
     }
+  });
+});
+
+describe("createFakeCore — wstrzykiwanie awarii (failNext, clearFaults) i liczniki wywołań", () => {
+  it("symuluje błędy 500, 502, 503, 504 i 429 z Retry-After w standardowej kopercie błędu", async () => {
+    const core = await createFakeCore({
+      issuer: ISSUER,
+      coreApiUrl: CORE_API,
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    const acme = core.organization({ name: "Acme", domain: "acme.test" });
+    acme.grantEntitlement("timotime");
+    const anna = acme.addEmployee({ firstName: "Anna", lastName: "Nowak", products: ["timotime"] });
+    const token = await fetchMachineToken(core, CORE_PERMISSIONS_READ_SCOPE);
+    const snapshotUrl = `${CORE_API}/core/v1/products/timotime/permission-snapshot?organizationId=${acme.id}&accountId=${anna.accountId}`;
+
+    const cases: { status: 500 | 502 | 503 | 504; expectedCode: string }[] = [
+      { status: 500, expectedCode: "INTERNAL" },
+      { status: 502, expectedCode: "SERVICE_UNAVAILABLE" },
+      { status: 503, expectedCode: "SERVICE_UNAVAILABLE" },
+      { status: 504, expectedCode: "SERVICE_UNAVAILABLE" },
+    ];
+
+    for (const item of cases) {
+      core.failNext("permissionSnapshot", { status: item.status });
+      const res = await core.fetch(snapshotUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const check = await checkErrorEnvelope(res, {
+        expectedStatus: item.status,
+        expectedCode: item.expectedCode,
+        requireEmptyDetails: true,
+      });
+      expect(check.passed).toBe(true);
+    }
+
+    // 429 z nagłówkiem Retry-After
+    core.failNext("permissionSnapshot", { status: 429, retryAfterSeconds: 30 });
+    const rateLimited = await core.fetch(snapshotUrl, { headers: { Authorization: `Bearer ${token}` } });
+    expect(rateLimited.headers.get("retry-after")).toBe("30");
+    const rateCheck = await checkErrorEnvelope(rateLimited, {
+      expectedStatus: 429,
+      expectedCode: "RATE_LIMITED",
+      requireEmptyDetails: true,
+    });
+    expect(rateCheck.passed).toBe(true);
+
+    // Kolejne wywołanie po wyczerpaniu awarii odpowiada poprawnie
+    const okRes = await core.fetch(snapshotUrl, { headers: { Authorization: `Bearer ${token}` } });
+    expect(okRes.status).toBe(200);
+    expect(core.calls("permissionSnapshot")).toBe(6);
+    expect(core.calls.permissionSnapshot).toBe(6);
+  });
+
+  it("obsługuje delayMs oraz kolejkuje awarie z times w kolejności FIFO na wybranej operacji", async () => {
+    const core = await createFakeCore({
+      issuer: ISSUER,
+      coreApiUrl: CORE_API,
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    core.failNext("jwks", { status: 503 }, { times: 2 });
+    core.failNext("jwks", { status: 429, retryAfterSeconds: 5 });
+    core.failNext("jwks", { delayMs: 40 });
+
+    // Inna operacja nie jest objęta awarią kolejkowaną dla jwks
+    const healthRes = await core.fetch(`${CORE_API}/core/v1/health`);
+    expect(healthRes.status).toBe(200);
+    expect(core.calls("health")).toBe(1);
+
+    const first = await core.fetch(`${ISSUER}/api/auth/jwks`);
+    const second = await core.fetch(`${ISSUER}/api/auth/jwks`);
+    const third = await core.fetch(`${ISSUER}/api/auth/jwks`);
+    expect(first.status).toBe(503);
+    expect(second.status).toBe(503);
+    expect(third.status).toBe(429);
+    expect(third.headers.get("retry-after")).toBe("5");
+
+    const startedAt = Date.now();
+    const delayed = await core.fetch(`${ISSUER}/api/auth/jwks`);
+    const elapsedMs = Date.now() - startedAt;
+    expect(delayed.status).toBe(200);
+    expect(elapsedMs).toBeGreaterThanOrEqual(30);
+    expect(await delayed.json()).toEqual(core.issuer.jwks);
+
+    expect(core.calls("jwks")).toBe(4);
+  });
+
+  it("symuluje networkError jako TypeError w fetch i zrywa gniazdo w serwerze HTTP listen()", async () => {
+    const core = await createFakeCore({
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    core.failNext("jwks", { networkError: true });
+    await expect(core.fetch(`${core.issuerUrl}/api/auth/jwks`)).rejects.toBeInstanceOf(TypeError);
+    expect(core.calls("jwks")).toBe(1);
+
+    // Kolejne żądanie już działa
+    const okRes = await core.fetch(`${core.issuerUrl}/api/auth/jwks`);
+    expect(okRes.status).toBe(200);
+    expect(core.calls("jwks")).toBe(2);
+
+    // Serwer HTTP zrywa gniazdo przy networkError
+    const server = await core.listen();
+    try {
+      core.failNext("jwks", { networkError: true });
+      const destroyed = await new Promise<boolean>((resolve) => {
+        const req = Readable.from([]) as unknown as IncomingMessage;
+        req.method = "GET";
+        req.url = "/api/auth/jwks";
+        req.headers = {};
+        let socketDestroyed = false;
+        (req as unknown as { socket: { destroy: () => void } }).socket = {
+          destroy: () => {
+            socketDestroyed = true;
+            resolve(true);
+          },
+        };
+
+        const res = new EventEmitter() as unknown as ServerResponse;
+        res.statusCode = 200;
+        res.setHeader = (() => res) as ServerResponse["setHeader"];
+        res.end = (() => {
+          resolve(socketDestroyed);
+          return res;
+        }) as ServerResponse["end"];
+
+        server.server.emit("request", req, res);
+      });
+      expect(destroyed).toBe(true);
+      expect(core.calls("jwks")).toBe(3);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("czyści kolejki przez clearFaults() i reset(), zeruje liczniki przez resetCalls() i waliduje parametry", async () => {
+    const core = await createFakeCore({
+      issuer: ISSUER,
+      coreApiUrl: CORE_API,
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    core.failNext("jwks", { status: 503 }, { times: 3 });
+    core.clearFaults();
+
+    const okAfterClear = await core.fetch(`${ISSUER}/api/auth/jwks`);
+    expect(okAfterClear.status).toBe(200);
+    expect(core.calls("jwks")).toBe(1);
+
+    core.resetCalls();
+    const ops: FakeCoreOperation[] = [
+      "jwks",
+      "token",
+      "health",
+      "me",
+      "permissionSnapshot",
+      "directoryUnitMembers",
+      "directoryEmployees",
+      "registerPermissions",
+      "registerRoleTemplates",
+    ];
+    for (const op of ops) {
+      expect(core.calls(op)).toBe(0);
+    }
+
+    // reset() usuwa też zakolejkowane awarie
+    core.failNext("health", { status: 500 });
+    core.reset();
+    const okAfterReset = await core.fetch(`${CORE_API}/core/v1/health`);
+    expect(okAfterReset.status).toBe(200);
+    expect(core.calls("health")).toBe(1);
+
+    // Walidacja błędnych parametrów
+    expect(() => core.failNext("jwks", { status: 500 }, { times: 0 })).toThrow(RangeError);
+    expect(() => core.failNext("jwks", { delayMs: -1 })).toThrow(RangeError);
+    expect(() => core.failNext("jwks", { status: 429, retryAfterSeconds: -5 })).toThrow(RangeError);
+    expect(() => core.setDirectoryPageSize(0)).toThrow(RangeError);
+    await expect(createFakeCore({ directoryPageSize: -2 })).rejects.toThrow(RangeError);
+  });
+});
+
+describe("createFakeCore — stronicowanie katalogu (directoryPageSize)", () => {
+  it("dzieli /directory/employees na strony po directoryPageSize, respektuje mniejszy limit i wspiera setDirectoryPageSize", async () => {
+    const core = await createFakeCore({
+      issuer: ISSUER,
+      coreApiUrl: CORE_API,
+      directoryPageSize: 2,
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    const seeded = core.seedOrganization({
+      name: "Acme",
+      domain: "acme.test",
+      entitlements: ["timotime"],
+      employees: [
+        { key: "e1", firstName: "Anna", lastName: "Nowak" },
+        { key: "e2", firstName: "Jan", lastName: "Kowalski" },
+        { key: "e3", firstName: "Piotr", lastName: "Zieliński" },
+        { key: "e4", firstName: "Ewa", lastName: "Wiśniewska" },
+        { key: "e5", firstName: "Karol", lastName: "Lewandowski" },
+      ],
+    });
+    const token = await fetchMachineToken(core, CORE_DIRECTORY_READ_SCOPE);
+    const orgId = seeded.organization.id;
+
+    // 5 pracowników przy directoryPageSize: 2 -> 3 strony (2, 2, 1), ostatnia z nextCursor: null
+    const pageSizes: number[] = [];
+    const collectedIds: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const qs = new URLSearchParams({ organizationId: orgId });
+      if (cursor) qs.set("cursor", cursor);
+      const res = await core.fetch(`${CORE_API}/core/v1/products/timotime/directory/employees?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { id: string }[];
+        meta: { nextCursor: string | null };
+      };
+      pageSizes.push(body.data.length);
+      collectedIds.push(...body.data.map((e) => e.id));
+      cursor = body.meta.nextCursor;
+    } while (cursor !== null);
+
+    expect(pageSizes).toEqual([2, 2, 1]);
+    expect(new Set(collectedIds).size).toBe(5);
+    expect(core.calls("directoryEmployees")).toBe(3);
+
+    // limit większy niż directoryPageSize jest ograniczany do directoryPageSize (min)
+    const cappedRes = await core.fetch(
+      `${CORE_API}/core/v1/products/timotime/directory/employees?organizationId=${orgId}&limit=10`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const cappedBody = (await cappedRes.json()) as { data: unknown[]; meta: { nextCursor: string | null } };
+    expect(cappedBody.data).toHaveLength(2);
+    expect(cappedBody.meta.nextCursor).not.toBeNull();
+
+    // limit mniejszy niż directoryPageSize obowiązuje (min)
+    const smallerRes = await core.fetch(
+      `${CORE_API}/core/v1/products/timotime/directory/employees?organizationId=${orgId}&limit=1`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const smallerBody = (await smallerRes.json()) as { data: unknown[]; meta: { nextCursor: string | null } };
+    expect(smallerBody.data).toHaveLength(1);
+    expect(smallerBody.meta.nextCursor).not.toBeNull();
+
+    // Wyłączenie directoryPageSize przywraca jedną stronę z wszystkimi pracownikami
+    core.setDirectoryPageSize(undefined);
+    const allRes = await core.fetch(
+      `${CORE_API}/core/v1/products/timotime/directory/employees?organizationId=${orgId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    const allBody = (await allRes.json()) as { data: unknown[]; meta: { nextCursor: string | null } };
+    expect(allBody.data).toHaveLength(5);
+    expect(allBody.meta.nextCursor).toBeNull();
+  });
+
+  it("stronicuje /directory/unit-members według directoryPageSize", async () => {
+    const core = await createFakeCore({
+      issuer: ISSUER,
+      coreApiUrl: CORE_API,
+      directoryPageSize: 2,
+      products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+    });
+
+    const seeded = core.seedOrganization({
+      name: "Acme",
+      domain: "acme.test",
+      entitlements: ["timotime"],
+      units: [{ key: "krakow", name: "Oddział Kraków", type: "BRANCH" }],
+      employees: [
+        { key: "e1", firstName: "Anna", lastName: "Nowak", unitKeys: ["krakow"] },
+        { key: "e2", firstName: "Jan", lastName: "Kowalski", unitKeys: ["krakow"] },
+        { key: "e3", firstName: "Piotr", lastName: "Zieliński", unitKeys: ["krakow"] },
+        { key: "e4", firstName: "Ewa", lastName: "Wiśniewska", unitKeys: ["krakow"] },
+        { key: "e5", firstName: "Karol", lastName: "Lewandowski", unitKeys: ["krakow"] },
+      ],
+    });
+    const token = await fetchMachineToken(core, CORE_DIRECTORY_READ_SCOPE);
+    const orgId = seeded.organization.id;
+
+    const pageSizes: number[] = [];
+    const memberEmployeeIds: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const qs = new URLSearchParams({ organizationId: orgId });
+      if (cursor) qs.set("cursor", cursor);
+      const res = await core.fetch(`${CORE_API}/core/v1/products/timotime/directory/unit-members?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { employeeId: string }[];
+        meta: { nextCursor: string | null };
+      };
+      pageSizes.push(body.data.length);
+      memberEmployeeIds.push(...body.data.map((m) => m.employeeId));
+      cursor = body.meta.nextCursor;
+    } while (cursor !== null);
+
+    expect(pageSizes).toEqual([2, 2, 1]);
+    expect(new Set(memberEmployeeIds).size).toBe(5);
+    expect(core.calls("directoryUnitMembers")).toBe(3);
   });
 });

@@ -186,6 +186,53 @@ const janToken = await acme.signUserToken(jan.accountId, {
 
 Ten sam scenariusz można zapisać deklaratywnie przez `fakeCore.seedOrganization({ name: "Acme", ... })`.
 
+## Symulacja awarii, stronicowanie katalogu i liczniki wywołań
+
+Atrapa Core potrafi na żądanie zwracać błędy (`500`, `502`, `503`, `504`, `429` z nagłówkiem `Retry-After`), opóźniać odpowiedzi (`delayMs`) albo zrywać połączenie (`networkError: true`), a także dzielić odpowiedzi katalogu (`/directory/employees` i `/directory/unit-members`) na mniejsze strony.
+
+```ts
+import { createFakeCore } from "@monorise-team/testing";
+
+const fakeCore = await createFakeCore({
+  issuer: "https://auth.monorise.test",
+  coreApiUrl: "https://api.monorise.test",
+  products: [{ key: "timotime", clientId: "timotime-web", clientSecret: "sekret-timotime" }],
+  directoryPageSize: 2, // katalog zwraca najwyżej 2 pozycje na stronę z nextCursor
+});
+
+const acme = fakeCore.organization({ name: "Acme", domain: "acme.test" });
+acme.grantEntitlement("timotime");
+const anna = acme.addEmployee({
+  firstName: "Anna",
+  lastName: "Nowak",
+  email: "anna@acme.test",
+  products: ["timotime"],
+});
+
+// 1. Pierwsze pobranie migawki zapisuje uprawnienia Anny w pamięci podręcznej produktu
+const initial = await timotimePermissions.loadForAccount(acme.id, anna.accountId);
+expect(initial.products).toEqual(["timotime"]);
+
+// 2. Kolejne wywołanie migawki odpowie raz 503 SERVICE_UNAVAILABLE
+fakeCore.failNext("permissionSnapshot", { status: 503 });
+
+// Produkt utrzymuje poprzednią migawkę z pamięci podręcznej zamiast zwracać pustą listę
+const fallback = await timotimePermissions.loadForAccount(acme.id, anna.accountId);
+expect(fallback.products).toEqual(["timotime"]);
+expect(fakeCore.calls("permissionSnapshot")).toBe(2);
+
+// Czyszczenie między testami
+fakeCore.clearFaults();
+fakeCore.resetCalls();
+```
+
+Najważniejsze metody i opcje:
+
+- `fakeCore.failNext(operation, fault, { times })` — kolejkuje awarię dla jednej operacji (`"jwks"`, `"token"`, `"health"`, `"me"`, `"permissionSnapshot"`, `"directoryUnitMembers"`, `"directoryEmployees"`, `"registerPermissions"`, `"registerRoleTemplates"`). Domyślnie `times = 1`; kolejne wywołania `failNext` dla tej samej operacji wykonują się w kolejności dodania.
+- `fakeCore.clearFaults()` — usuwa wszystkie zakolejkowane awarie (`fakeCore.reset()` również je czyści).
+- `directoryPageSize` w `createFakeCore(...)` oraz `fakeCore.setDirectoryPageSize(size)` — ogranicza rozmiar strony dla `directory/employees` i `directory/unit-members` (jeśli klient poda mniejszy `limit`, obowiązuje mniejsza z dwóch wartości). Bez tej opcji zachowanie jest takie jak dotychczas.
+- `fakeCore.calls(operation)` (oraz dla zgodności wstecz `fakeCore.calls.<operation>`) — zwraca liczbę żądań, które dotarły do danej operacji, łącznie z żądaniami z wstrzykniętą awarią; `fakeCore.resetCalls()` zeruje liczniki.
+
 ## Użycie bez Vitesta i pomocniki niskopoziomowe
 
 Każde sprawdzenie jest dostępne jako zwykła funkcja asynchroniczna zwracająca `{ passed, violations }`:

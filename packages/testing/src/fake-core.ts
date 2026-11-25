@@ -30,6 +30,40 @@ export const CORE_PERMISSIONS_REGISTER_SCOPE = "core:permissions.register";
 export const CORE_PERMISSIONS_READ_SCOPE = "core:permissions.read";
 export const CORE_DIRECTORY_READ_SCOPE = "core:directory.read";
 
+const FAKE_CORE_OPERATIONS = [
+  "jwks",
+  "token",
+  "health",
+  "me",
+  "permissionSnapshot",
+  "directoryUnitMembers",
+  "directoryEmployees",
+  "registerPermissions",
+  "registerRoleTemplates",
+] as const;
+
+export type FakeCoreOperation = (typeof FAKE_CORE_OPERATIONS)[number];
+
+export type FakeCoreFault =
+  | { readonly status: 500 | 502 | 503 | 504 }
+  | { readonly status: 429; readonly retryAfterSeconds: number }
+  | { readonly delayMs: number }
+  | { readonly networkError: true };
+
+export interface FailNextOptions {
+  /** Liczba kolejnych wywołań operacji, dla których zadziała wstrzyknięta awaria (domyślnie `1`). */
+  times?: number;
+}
+
+export type FakeCoreCalls = ((operation: FakeCoreOperation) => number) & Record<FakeCoreOperation, number>;
+
+const HTTP_FAULT_DEFAULTS: Record<500 | 502 | 503 | 504, { code: string; message: string }> = {
+  500: { code: "INTERNAL", message: "Wewnętrzny błąd serwera" },
+  502: { code: "SERVICE_UNAVAILABLE", message: "Błąd bramy serwera" },
+  503: { code: "SERVICE_UNAVAILABLE", message: "Usługa tymczasowo niedostępna" },
+  504: { code: "SERVICE_UNAVAILABLE", message: "Przekroczono czas oczekiwania bramy" },
+};
+
 const DEFAULT_MACHINE_SCOPES = [
   CORE_PERMISSIONS_REGISTER_SCOPE,
   CORE_PERMISSIONS_READ_SCOPE,
@@ -156,6 +190,8 @@ export interface CreateFakeCoreOptions {
   products?: readonly FakeCoreProductConfig[];
   /** Opcjonalna funkcja zwracająca bieżący czas (np. do deterministycznych testów wygasania). */
   now?: () => Date;
+  /** Maksymalny rozmiar strony dla katalogu (`directory/employees` i `directory/unit-members`). */
+  directoryPageSize?: number;
 }
 
 export interface RecordedPermissionsRegistration {
@@ -225,6 +261,13 @@ class FakeCoreApiError extends Error {
   }
 }
 
+class FakeCoreNetworkError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "TypeError";
+  }
+}
+
 export interface FakeCore {
   /** Aktywny wystawca kluczy i tokenów JWT. */
   readonly issuer: TestIssuer;
@@ -251,22 +294,24 @@ export interface FakeCore {
     readonly permissions: readonly RecordedPermissionsRegistration[];
     readonly roleTemplates: readonly RecordedRoleTemplatesRegistration[];
   };
-  /** Liczniki wywołań poszczególnych endpointów atrapy Core. */
-  readonly calls: {
-    jwks: number;
-    token: number;
-    me: number;
-    permissionSnapshot: number;
-    directoryUnitMembers: number;
-    directoryEmployees: number;
-    registerPermissions: number;
-    registerRoleTemplates: number;
-  };
+  /**
+   * Liczniki wywołań poszczególnych endpointów atrapy Core (łącznie z wywołaniami z wstrzykniętą awarią).
+   * Działa zarówno jako funkcja `calls(operation)`, jak i obiekt z polami `calls.<operation>`.
+   */
+  readonly calls: FakeCoreCalls;
+  /** Kolejkuje awarię dla wskazanej operacji (domyślnie dla 1 kolejnego wywołania). */
+  failNext(operation: FakeCoreOperation, fault: FakeCoreFault, options?: FailNextOptions): void;
+  /** Usuwa wszystkie zakolejkowane awarie dla wszystkich operacji. */
+  clearFaults(): void;
+  /** Zeruje liczniki wywołań wszystkich operacji. */
+  resetCalls(): void;
+  /** Ustawia lub usuwa maksymalny rozmiar strony dla katalogu (`directory/employees` i `directory/unit-members`). */
+  setDirectoryPageSize(pageSize: number | undefined): void;
   /** Handler zgodny z `fetch` do bezpośredniego podpięcia np. w `@monorise-team/sdk`. */
   readonly fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   /** Uruchamia lokalny serwer HTTP na losowym porcie dla produktów wywołujących Core po adresie URL. */
   listen(options?: ListenOptions): Promise<FakeCoreServerHandle>;
-  /** Czyści dane firm, historię rejestracji i liczniki wywołań (produkty i klucze pozostają). */
+  /** Czyści dane firm, historię rejestracji, wstrzyknięte awarie i liczniki wywołań (produkty i klucze pozostają). */
   reset(): void;
 }
 
@@ -274,16 +319,25 @@ function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
+function validateDirectoryPageSize(pageSize: number | undefined): number | undefined {
+  if (pageSize === undefined) return undefined;
+  if (!Number.isInteger(pageSize) || pageSize < 1) {
+    throw new RangeError("Rozmiar strony katalogu (directoryPageSize) musi być dodatnią liczbą całkowitą");
+  }
+  return pageSize;
+}
+
 function makeRequestId(): string {
   return `req_${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
 }
 
-function jsonResponse(status: number, body: unknown): Response {
+function jsonResponse(status: number, body: unknown, extraHeaders?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
+      ...extraHeaders,
     },
   });
 }
@@ -309,12 +363,17 @@ function errorEnvelope(
   code: string,
   message: string,
   details: { field?: string; message: string }[] = [],
+  extraHeaders?: Record<string, string>,
 ): Response {
-  return jsonResponse(status, {
-    data: null,
-    meta: { requestId: makeRequestId() },
-    error: { code, message, details },
-  });
+  return jsonResponse(
+    status,
+    {
+      data: null,
+      meta: { requestId: makeRequestId() },
+      error: { code, message, details },
+    },
+    extraHeaders,
+  );
 }
 
 function encodeCursor(id: string): string {
@@ -478,15 +537,18 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
   );
   let activeIssuer: TestIssuer = options.testIssuer ?? (await createTestIssuer({ issuer: activeIssuerUrl }));
   const getNow = options.now ?? (() => new Date());
+  let directoryPageSize = validateDirectoryPageSize(options.directoryPageSize);
 
   const products = new Map<string, RegisteredProduct>();
   const organizations = new Map<string, FakeOrganizationData>();
   const permissionRegistrations: RecordedPermissionsRegistration[] = [];
   const roleTemplateRegistrations: RecordedRoleTemplatesRegistration[] = [];
+  const faultQueues = new Map<FakeCoreOperation, FakeCoreFault[]>();
 
-  const calls = {
+  const callCounts: Record<FakeCoreOperation, number> = {
     jwks: 0,
     token: 0,
+    health: 0,
     me: 0,
     permissionSnapshot: 0,
     directoryUnitMembers: 0,
@@ -494,6 +556,79 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
     registerPermissions: 0,
     registerRoleTemplates: 0,
   };
+
+  const calls = ((operation: FakeCoreOperation): number => callCounts[operation]) as FakeCoreCalls;
+  for (const op of FAKE_CORE_OPERATIONS) {
+    Object.defineProperty(calls, op, {
+      enumerable: true,
+      get: () => callCounts[op],
+      set: (value: number) => {
+        callCounts[op] = value;
+      },
+    });
+  }
+
+  function failNext(operation: FakeCoreOperation, fault: FakeCoreFault, failOptions: FailNextOptions = {}): void {
+    const times = failOptions.times ?? 1;
+    if (!Number.isInteger(times) || times < 1) {
+      throw new RangeError("Parametr times w failNext musi być dodatnią liczbą całkowitą");
+    }
+    if ("delayMs" in fault && (!Number.isFinite(fault.delayMs) || fault.delayMs < 0)) {
+      throw new RangeError("Opóźnienie delayMs w failNext musi być nieujemną liczbą");
+    }
+    if (
+      "status" in fault &&
+      fault.status === 429 &&
+      (!Number.isFinite(fault.retryAfterSeconds) || fault.retryAfterSeconds < 0)
+    ) {
+      throw new RangeError("Parametr retryAfterSeconds w failNext musi być nieujemną liczbą");
+    }
+    const queue = faultQueues.get(operation) ?? [];
+    for (let i = 0; i < times; i++) {
+      queue.push(fault);
+    }
+    faultQueues.set(operation, queue);
+  }
+
+  function clearFaults(): void {
+    faultQueues.clear();
+  }
+
+  function resetCalls(): void {
+    for (const op of FAKE_CORE_OPERATIONS) {
+      callCounts[op] = 0;
+    }
+  }
+
+  function setDirectoryPageSize(pageSize: number | undefined): void {
+    directoryPageSize = validateDirectoryPageSize(pageSize);
+  }
+
+  async function applyOperationHook(operation: FakeCoreOperation): Promise<Response | null> {
+    callCounts[operation] += 1;
+    const queue = faultQueues.get(operation);
+    const fault = queue?.shift();
+    if (!fault) return null;
+    if (queue && queue.length === 0) {
+      faultQueues.delete(operation);
+    }
+    if ("networkError" in fault) {
+      throw new FakeCoreNetworkError(`Symulowany błąd sieci dla operacji "${operation}"`);
+    }
+    if ("delayMs" in fault) {
+      if (fault.delayMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, fault.delayMs));
+      }
+      return null;
+    }
+    if (fault.status === 429) {
+      return errorEnvelope(429, "RATE_LIMITED", "Przekroczono limit żądań", [], {
+        "Retry-After": String(fault.retryAfterSeconds),
+      });
+    }
+    const { code, message } = HTTP_FAULT_DEFAULTS[fault.status];
+    return errorEnvelope(fault.status, code, message);
+  }
 
   function registerProduct(config: FakeCoreProductConfig): void {
     const key = productNameSchema.parse(config.key);
@@ -720,7 +855,6 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
   }
 
   async function handleOAuthToken(request: Request): Promise<Response> {
-    calls.token += 1;
     const rawBody = await request.text();
     const form = new URLSearchParams(rawBody);
 
@@ -793,7 +927,6 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
   }
 
   async function handleRegisterPermissions(request: Request, productKeyParam: string): Promise<Response> {
-    calls.registerPermissions += 1;
     const machine = await verifyMachineCaller(request, CORE_PERMISSIONS_REGISTER_SCOPE);
     const product = requireProductForMachine(
       productKeyParam,
@@ -872,7 +1005,6 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
   }
 
   async function handleRegisterRoleTemplates(request: Request, productKeyParam: string): Promise<Response> {
-    calls.registerRoleTemplates += 1;
     const machine = await verifyMachineCaller(request, CORE_PERMISSIONS_REGISTER_SCOPE);
     const product = requireProductForMachine(
       productKeyParam,
@@ -992,20 +1124,26 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
     try {
       if (method === "GET" && pathname === "/api/auth/jwks") {
-        calls.jwks += 1;
+        const fault = await applyOperationHook("jwks");
+        if (fault) return fault;
         return jsonResponse(200, activeIssuer.jwks);
       }
 
       if (method === "POST" && pathname === "/api/auth/oauth2/token") {
+        const fault = await applyOperationHook("token");
+        if (fault) return fault;
         return await handleOAuthToken(request);
       }
 
       if (method === "GET" && pathname === "/core/v1/health") {
+        const fault = await applyOperationHook("health");
+        if (fault) return fault;
         return successEnvelope({ status: "ok" });
       }
 
       if (method === "GET" && pathname === "/core/v1/me") {
-        calls.me += 1;
+        const fault = await applyOperationHook("me");
+        if (fault) return fault;
         const { org, account } = await verifyUserCaller(request);
         const employee = org.employees.get(account.employeeId);
         if (!employee) {
@@ -1038,7 +1176,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
       const snapshotMatch = /^\/core\/v1\/products\/([^/]+)\/permission-snapshot$/.exec(pathname);
       if (method === "GET" && snapshotMatch) {
-        calls.permissionSnapshot += 1;
+        const fault = await applyOperationHook("permissionSnapshot");
+        if (fault) return fault;
         const machine = await verifyMachineCaller(request, CORE_PERMISSIONS_READ_SCOPE);
         const productKeyParam = decodeURIComponent(snapshotMatch[1]!);
         const query = parseOrFail(PermissionSnapshotQuerySchema, {
@@ -1056,7 +1195,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
       const unitMembersMatch = /^\/core\/v1\/products\/([^/]+)\/directory\/unit-members$/.exec(pathname);
       if (method === "GET" && unitMembersMatch) {
-        calls.directoryUnitMembers += 1;
+        const fault = await applyOperationHook("directoryUnitMembers");
+        if (fault) return fault;
         const machine = await verifyMachineCaller(request, CORE_DIRECTORY_READ_SCOPE);
         const productKeyParam = decodeURIComponent(unitMembersMatch[1]!);
         const page = parsePageAndRepeatableFilter(url.searchParams, "unitId");
@@ -1069,7 +1209,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
         const unitIdSet = page.filterIds ? new Set(page.filterIds) : null;
         const matching = [...org.unitMemberships.values()].filter((m) => (unitIdSet ? unitIdSet.has(m.unitId) : true));
-        const { items, nextCursor } = paginateById(matching, page.limit, page.afterId);
+        const effectiveLimit = directoryPageSize !== undefined ? Math.min(page.limit, directoryPageSize) : page.limit;
+        const { items, nextCursor } = paginateById(matching, effectiveLimit, page.afterId);
         return listEnvelope(
           items.map((item) => {
             const employee = org.employees.get(item.employeeId);
@@ -1086,7 +1227,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
       const employeesMatch = /^\/core\/v1\/products\/([^/]+)\/directory\/employees$/.exec(pathname);
       if (method === "GET" && employeesMatch) {
-        calls.directoryEmployees += 1;
+        const fault = await applyOperationHook("directoryEmployees");
+        if (fault) return fault;
         const machine = await verifyMachineCaller(request, CORE_DIRECTORY_READ_SCOPE);
         const productKeyParam = decodeURIComponent(employeesMatch[1]!);
         const page = parsePageAndRepeatableFilter(url.searchParams, "employeeId");
@@ -1099,7 +1241,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
         const employeeIdSet = page.filterIds ? new Set(page.filterIds) : null;
         const matching = [...org.employees.values()].filter((e) => (employeeIdSet ? employeeIdSet.has(e.id) : true));
-        const { items, nextCursor } = paginateById(matching, page.limit, page.afterId);
+        const effectiveLimit = directoryPageSize !== undefined ? Math.min(page.limit, directoryPageSize) : page.limit;
+        const { items, nextCursor } = paginateById(matching, effectiveLimit, page.afterId);
         return listEnvelope(
           items.map((employee) => ({
             id: employee.id,
@@ -1114,16 +1257,23 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
 
       const permissionsMatch = /^\/core\/v1\/products\/([^/]+)\/permissions$/.exec(pathname);
       if (method === "PUT" && permissionsMatch) {
+        const fault = await applyOperationHook("registerPermissions");
+        if (fault) return fault;
         return await handleRegisterPermissions(request, decodeURIComponent(permissionsMatch[1]!));
       }
 
       const roleTemplatesMatch = /^\/core\/v1\/products\/([^/]+)\/role-templates$/.exec(pathname);
       if (method === "PUT" && roleTemplatesMatch) {
+        const fault = await applyOperationHook("registerRoleTemplates");
+        if (fault) return fault;
         return await handleRegisterRoleTemplates(request, decodeURIComponent(roleTemplatesMatch[1]!));
       }
 
       return errorEnvelope(404, "NOT_FOUND", "Nie ma takiego zasobu");
     } catch (error) {
+      if (error instanceof FakeCoreNetworkError) {
+        throw error;
+      }
       if (error instanceof FakeCoreApiError) {
         return errorEnvelope(error.status, error.code, error.message, error.details);
       }
@@ -1169,7 +1319,17 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
           });
           const payload = Buffer.from(await response.arrayBuffer());
           res.end(payload);
-        } catch {
+        } catch (error) {
+          if (error instanceof FakeCoreNetworkError) {
+            if (req.socket && typeof req.socket.destroy === "function") {
+              req.socket.destroy();
+            } else if (res.socket && typeof res.socket.destroy === "function") {
+              res.socket.destroy();
+            } else if (typeof res.destroy === "function") {
+              res.destroy();
+            }
+            return;
+          }
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json");
           res.end(
@@ -1261,14 +1421,8 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
       product.permissions.clear();
       product.roleTemplates.clear();
     }
-    calls.jwks = 0;
-    calls.token = 0;
-    calls.me = 0;
-    calls.permissionSnapshot = 0;
-    calls.directoryUnitMembers = 0;
-    calls.directoryEmployees = 0;
-    calls.registerPermissions = 0;
-    calls.registerRoleTemplates = 0;
+    clearFaults();
+    resetCalls();
   }
 
   return {
@@ -1293,6 +1447,10 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
       roleTemplates: roleTemplateRegistrations,
     },
     calls,
+    failNext,
+    clearFaults,
+    resetCalls,
+    setDirectoryPageSize,
     fetch: fakeFetch,
     listen,
     reset,
