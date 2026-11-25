@@ -1,6 +1,5 @@
 import { density, fontScale, resolveColors, shape, zIndex } from "@monorise-team/tokens";
-import { Card, useTheme } from "@monorise-team/ui";
-import { AppearanceControls } from "../AppearanceControls";
+import { AppearanceControls, Card, useTheme } from "@monorise-team/ui";
 
 /** Fundamenty projektu: sterowanie wyglądem, wszystkie tokeny kolorów i skale układu. */
 export function FoundationsSection() {
