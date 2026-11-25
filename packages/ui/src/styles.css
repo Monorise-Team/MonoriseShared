@@ -406,3 +406,45 @@
 :root.reduce-motion .mr-press:not(:disabled):active {
   transform: none;
 }
+
+/* Szkielet aplikacji i ustawienia (#52) */
+.mr-hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.mr-hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.mr-sidebar-shell {
+  transition-property: width;
+  transition-duration: var(--mr-anim-normal);
+  transition-timing-function: var(--mr-ease-out);
+}
+
+.mr-accordion-panel {
+  transition-property: grid-template-rows;
+  transition-duration: var(--mr-anim-normal);
+  transition-timing-function: var(--mr-ease-out);
+}
+
+.mr-accordion-chevron {
+  transition-property: transform;
+  transition-duration: var(--mr-anim-fast);
+  transition-timing-function: var(--mr-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-sidebar-shell,
+  .mr-accordion-panel,
+  .mr-accordion-chevron {
+    transition: none;
+  }
+}
+
+:root.reduce-motion .mr-sidebar-shell,
+:root.reduce-motion .mr-accordion-panel,
+:root.reduce-motion .mr-accordion-chevron {
+  transition: none;
+}
