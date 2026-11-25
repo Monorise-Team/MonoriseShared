@@ -1,7 +1,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { accentVariables, resolveColors, semantic, themeNames, themes } from "../src/index.js";
+import {
+  accentVariables,
+  density,
+  densityNames,
+  fontScale,
+  fontScaleNames,
+  middleTextTertiary,
+  resolveColors,
+  semantic,
+  themeNames,
+  themes,
+  zIndex,
+} from "../src/index.js";
 
 const RGBA = /^rgba?\(\d+, \d+, \d+(, [\d.]+)?\)$|^#[0-9a-f]{6}$/i;
 
@@ -31,6 +43,9 @@ describe("tokens", () => {
         expect(value, name).not.toContain("color-mix");
         expect(value, name).toMatch(RGBA);
       }
+      expect(colors["accent-strong"]).toBe(themes[theme].accent[mode].accentStrong);
+      expect(colors["sidebar-active"]).toBe(themes[theme].accent[mode].accent);
+      expect(colors["sidebar-hover"]).toBeTruthy();
     },
   );
 
@@ -49,15 +64,69 @@ describe("tokens", () => {
     },
   );
 
-  it("zmienne akcentu mają przedrostek --mr-", () => {
-    expect(Object.keys(accentVariables("moonlight", "dark"))).toContain("--mr-accent");
+  it("wartości kolorów zgadzają się 1:1 z aven-mail", () => {
+    expect(themes.emerald.accent.light).toMatchObject({
+      accent: "#14b886",
+      accentHover: "#047857",
+      accentStrong: "#047857",
+      accentFg: "#022c22",
+      selected: "rgba(20, 184, 134, 0.18)",
+    });
+    expect(themes.amethyst.accent.light.selected).toBe("rgba(237, 233, 254, 0.65)");
+    expect(themes.amethyst.accent.dark.selected).toBe("rgba(46, 16, 101, 0.55)");
+    expect(themes.amethyst.accent.dark.link).toBe("#a78bfa");
+    expect(semantic.light.warning).toBe("#d97706");
+    expect(semantic.light.success).toBe("#059669");
+    expect(semantic.light.danger).toBe("#dc2626");
+    expect(semantic.dark.danger).toBe("#dc2626");
+    expect(middleTextTertiary.dark).toBe("#b9ccd5");
   });
 
-  it("wygenerowany CSS zawiera każdy motyw i każdy kolor", () => {
+  it("zmienne akcentu mają przedrostek --mr- i zawierają --mr-accent-strong", () => {
+    for (const theme of themeNames) {
+      for (const mode of ["light", "dark"] as const) {
+        const vars = accentVariables(theme, mode);
+        expect(vars).toHaveProperty("--mr-accent");
+        expect(vars["--mr-accent-strong"]).toBe(themes[theme].accent[mode].accentStrong);
+      }
+    }
+  });
+
+  it("eksportuje skalę z-index, gęstość i skalę tekstu dla Expo i CSS", () => {
+    expect(zIndex).toEqual({
+      base: 0,
+      sticky: 10,
+      dropdown: 40,
+      overlay: 50,
+      modal: 60,
+      popover: 70,
+      toast: 80,
+      tooltip: 90,
+    });
+    expect(density.compact).toEqual({ rowPaddingX: 12, rowPaddingY: 6, avatarSize: 28 });
+    expect(density.default).toEqual({ rowPaddingX: 16, rowPaddingY: 12, avatarSize: 36 });
+    expect(density.spacious).toEqual({ rowPaddingX: 16, rowPaddingY: 16, avatarSize: 40 });
+    expect(fontScale).toEqual({ small: 0.82, default: 1, large: 1.18, xlarge: 1.36 });
+  });
+
+  it("wygenerowany CSS zawiera każdy motyw, kolor, z-index, gęstość i skalę tekstu", () => {
     const css = readFileSync(join(import.meta.dirname, "../dist/tokens.css"), "utf8");
     for (const theme of themeNames) expect(css).toContain(`:root.dark[data-theme="${theme}"]`);
     for (const name of Object.keys(semantic.light)) expect(css).toContain(`--mr-${name}:`);
+    expect(css).toContain("--mr-accent-strong:");
+    expect(css).toContain("--mr-middle-text-tertiary: #b9ccd5;");
+    for (const [layer, level] of Object.entries(zIndex)) {
+      expect(css).toContain(`--mr-z-${layer}: ${level};`);
+    }
+    for (const name of densityNames) {
+      expect(css).toContain(`:root[data-density="${name}"]`);
+    }
+    for (const name of fontScaleNames) {
+      expect(css).toContain(`:root[data-font-scale="${name}"]`);
+      expect(css).toContain(`font-size: ${Math.round(fontScale[name] * 100)}%;`);
+    }
     const tailwind = readFileSync(join(import.meta.dirname, "../dist/tailwind.css"), "utf8");
     for (const name of Object.keys(semantic.light)) expect(tailwind).toContain(`--color-${name}: var(--mr-${name});`);
+    expect(tailwind).toContain("--color-accent-strong: var(--mr-accent-strong);");
   });
 });

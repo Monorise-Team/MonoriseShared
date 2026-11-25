@@ -12,8 +12,14 @@ const dist = join(dirname(fileURLToPath(import.meta.url)), "../dist");
 const tokens = await import(join(dist, "index.js"));
 const {
   accentVariables,
+  defaultDensity,
   defaultTheme,
+  density,
+  densityNames,
+  fontScale,
+  fontScaleNames,
   fonts,
+  middleTextTertiary,
   modeVariables,
   motion,
   semantic,
@@ -21,6 +27,7 @@ const {
   themeNames,
   themes,
   tintVariables,
+  zIndex,
 } = tokens;
 
 const HEADER =
@@ -30,11 +37,19 @@ const block = (selector, vars) =>
     .map(([name, value]) => `  ${name}: ${value};`)
     .join("\n")}\n}`;
 
+const densityVars = (name) => ({
+  "--mr-row-px": `${density[name].rowPaddingX}px`,
+  "--mr-row-py": `${density[name].rowPaddingY}px`,
+  "--mr-row-avatar": `${density[name].avatarSize}px`,
+});
+
 const base = {
   "--mr-font-sans": fonts.sans,
   "--mr-font-display": fonts.display,
   "--mr-font-mono": fonts.mono,
   ...Object.fromEntries(Object.entries(shape).map(([name, px]) => [`--mr-${name}`, `${px}px`])),
+  ...Object.fromEntries(Object.entries(zIndex).map(([name, level]) => [`--mr-z-${name}`, String(level)])),
+  ...densityVars(defaultDensity),
   "--mr-anim-fast": `${motion.duration.fast}ms`,
   "--mr-anim-normal": `${motion.duration.normal}ms`,
   "--mr-anim-slow": `${motion.duration.slow}ms`,
@@ -66,6 +81,7 @@ const css = [
     ...tintVariables(defaultTheme),
     ...accentVariables(defaultTheme, "light"),
     ...modeVariables("light"),
+    "--mr-middle-text-tertiary": middleTextTertiary.light,
     "--mr-backdrop": themes[defaultTheme].backdrop.light,
   }),
   "",
@@ -73,6 +89,7 @@ const css = [
     "color-scheme": "dark",
     ...accentVariables(defaultTheme, "dark"),
     ...modeVariables("dark"),
+    "--mr-middle-text-tertiary": middleTextTertiary.dark,
     "--mr-backdrop": themes[defaultTheme].backdrop.dark,
   }),
   ...themeNames.flatMap((name) => [
@@ -88,6 +105,16 @@ const css = [
       "--mr-backdrop": themes[name].backdrop.dark,
     }),
   ]),
+  "",
+  "/* Gęstość listy: atrybut data-density na <html> (`compact`, `default`, `spacious`). */",
+  ...densityNames.map((name) => block(`:root[data-density="${name}"]`, densityVars(name))),
+  "",
+  "/* Skala rozmiaru tekstu: atrybut data-font-scale lub klasa font-scale-* na <html>. */",
+  ...fontScaleNames.map((name) =>
+    block(`:root[data-font-scale="${name}"],\n:root.font-scale-${name}`, {
+      "font-size": `${Math.round(fontScale[name] * 100)}%`,
+    }),
+  ),
   "",
   "/* Ograniczony ruch: z ustawień systemu albo klasy `reduce-motion` na <html>. */",
   `@media (prefers-reduced-motion: reduce) {\n${block(":root", noMotion).replace(/^/gm, "  ")}\n}`,
@@ -109,6 +136,7 @@ const tailwind = [
     "--color-accent": "var(--mr-accent)",
     "--color-accent-hover": "var(--mr-accent-hover)",
     "--color-accent-light": "var(--mr-accent-light)",
+    "--color-accent-strong": "var(--mr-accent-strong)",
     "--color-accent-fg": "var(--mr-accent-fg)",
     "--color-link": "var(--mr-link)",
     "--radius-card": "var(--mr-card-radius)",

@@ -18,6 +18,7 @@ const ACCENT_VARS: Record<keyof Accent, string> = {
   accent: "accent",
   accentHover: "accent-hover",
   accentLight: "accent-light",
+  accentStrong: "accent-strong",
   accentFg: "accent-fg",
   selected: "selected",
   link: "link",
@@ -92,6 +93,7 @@ export function resolveColors(mode: Mode = defaultMode, theme: ThemeName = defau
     accent: accent.accent,
     "accent-hover": accent.accentHover,
     "accent-light": accent.accentLight,
+    "accent-strong": accent.accentStrong,
     "accent-fg": accent.accentFg,
     link: accent.link,
   };
