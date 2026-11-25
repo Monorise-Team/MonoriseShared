@@ -36,6 +36,15 @@ export {
 } from "./envelope.js";
 export { EventValidationError, UnsupportedEventVersionError, type EventValidationIssue } from "./errors.js";
 export {
+  createEventFeedPoller,
+  type EventFeedPoller,
+  type EventFeedPollerOptions,
+  type EventFeedRunSummary,
+  type FeedCursorStore,
+  type FeedEvent,
+  type FeedPage,
+} from "./feed.js";
+export {
   createOutboxRelay,
   fromOutboxRecord,
   toOutboxRecord,

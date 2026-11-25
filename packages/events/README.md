@@ -141,12 +141,68 @@ const permissionsConsumer = createEventConsumer({
 });
 ```
 
+## Pobieranie zdarzeń z kanału Core (bez AWS)
+
+Zanim produkty przejdą na docelową szynę AWS EventBridge i kolejki SQS, mogą pobierać zdarzenia z numerowanego kanału HTTP Core (`GET /core/v1/products/{product}/events`). Każde zdarzenie ma rosnący numer porządkowy `sequence`, a `createEventFeedPoller` pobiera kolejne strony po zapisanym kursorze, przekazuje zdarzenia po kolei do `createEventConsumer` (który dalej pilnuje `ProcessedEvent` i `resourceVersion`) i zapisuje kursor w bazie produktu po każdym zdarzeniu.
+
+Docelowym transportem pozostają EventBridge i SQS z ADR-0045 — dlatego `createEventFeedPoller` używa tego samego `EventConsumer` i po przełączeniu na kolejkę zmienia się tylko źródło komunikatów.
+
+```ts
+import { coreEvents, createEventConsumer, createEventFeedPoller } from "@monorise-team/events";
+
+const consumer = createEventConsumer({
+  consumer: "timotime",
+  catalog: coreEvents,
+  processed,
+  handlers: {
+    "organization.permissions.changed": async (event) => {
+      if (event.organizationId) {
+        await permissionsCache.invalidate({ organizationId: event.organizationId });
+      }
+    },
+  },
+});
+
+const poller = createEventFeedPoller({
+  consumer,
+  limit: 100,
+  cursor: {
+    load: async () => {
+      const row = await prisma.eventFeedCursor.findUnique({ where: { id: "core" } });
+      return row?.sequence ?? null;
+    },
+    save: async (sequence) => {
+      await prisma.eventFeedCursor.upsert({
+        where: { id: "core" },
+        create: { id: "core", sequence },
+        update: { sequence },
+      });
+    },
+  },
+  // Token serwerowy z zakresem core:events.read; kursor w Core to numer ostatnio przetworzonego zdarzenia.
+  fetchPage: (after, limit) =>
+    core.listProductEvents({
+      path: { productKey: "timotime" },
+      query: { ...(after ? { cursor: after } : {}), limit },
+    }),
+  onError: (error) => {
+    logger.error({ error }, "Core event feed poll failed");
+  },
+});
+
+const stop = poller.start();
+```
+
+- `runOnce()` działa w trybie single flight (równoległe wywołania współdzielą jeden przebieg) i zwraca podsumowanie z licznikami wyników (`processed`, `duplicate`, `stale`, `ignored`), liczbą stron, końcowym kursorem i flagą `caughtUp`.
+- Błąd obsługi zdarzenia lub zapisu kursora natychmiast przerywa przebieg, nie przesuwa kursora dalej i pozwala ponowić nieudane zdarzenie w kolejnym przebiegu.
+- `start()` uruchamia pierwszy przebieg od razu, a kolejny po upływie `intervalMs` od zakończenia poprzedniego; błędy przekazuje do `onError` bez przerywania pętli, a zwrócona funkcja `stop()` zatrzymuje kolejne przebiegi.
+
 ## Testy lokalne
 
 Do testów i pracy lokalnej służy `createInMemoryEventBus()`: implementuje `EventPublisher`, rozsyła każdą kopertę po serializacji JSON do wszystkich subskrybentów (`subscribe`) i dostarcza je deterministycznie po wywołaniu `flush()`.
 
 ## Poza zakresem tej paczki
 
-- Klienci AWS EventBridge i SQS oraz infrastruktura kolejek i archiwum.
-- Modele Prisma dla `OutboxEvent` i `ProcessedEvent` w bazach poszczególnych produktów.
+- Klienci AWS EventBridge i SQS, wywołania HTTP do Core (dostarczane przez `fetchPage` i `@monorise-team/sdk`) oraz infrastruktura kolejek i archiwum.
+- Modele Prisma dla `OutboxEvent`, `ProcessedEvent` i kursora kanału w bazach poszczególnych produktów.
 - Schematy `data` dla pozostałych zdarzeń z katalogu (powstaną razem z ich nadawcami w Core i produktach).
