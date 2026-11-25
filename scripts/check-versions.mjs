@@ -6,18 +6,21 @@
  *
  *   node scripts/check-versions.mjs          sprawdza i kończy się błędem przy rozbieżności
  */
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const read = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
+/** Tylko katalogi z package.json (pomija np. .DS_Store z macOS). */
+const parts = (folder) =>
+  readdirSync(join(root, folder)).filter((dir) => existsSync(join(root, folder, dir, "package.json")));
 const { version } = read("package.json");
 const manifest = read(".release-please-manifest.json")["."];
 const problems = [];
 
 if (manifest !== version) problems.push(`.release-please-manifest.json ma ${manifest}, a package.json ${version}`);
 
-const packages = readdirSync(join(root, "packages")).map((dir) => ({ dir, pkg: read(`packages/${dir}/package.json`) }));
+const packages = parts("packages").map((dir) => ({ dir, pkg: read(`packages/${dir}/package.json`) }));
 const names = new Set(packages.map(({ pkg }) => pkg.name));
 for (const { dir, pkg } of packages) {
   if (!pkg.name.startsWith("@monorise-team/")) problems.push(`packages/${dir}: nazwa ${pkg.name} bez @monorise-team/`);
@@ -31,7 +34,7 @@ for (const { dir, pkg } of packages) {
     }
   }
 }
-for (const dir of readdirSync(join(root, "apps"))) {
+for (const dir of parts("apps")) {
   const pkg = read(`apps/${dir}/package.json`);
   if (!pkg.private) problems.push(`apps/${dir}: aplikacja musi mieć "private": true (nie publikujemy jej)`);
 }
