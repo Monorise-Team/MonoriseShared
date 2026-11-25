@@ -141,6 +141,7 @@ describe("createFakeCore — OAuth, JWKS i /core/v1/me", () => {
       employee: {
         id: anna.employeeId,
         accountId: anna.accountId,
+        accountStatus: "ACTIVE",
         firstName: "Anna",
         lastName: "Nowak",
         workEmail: "anna@acme.test",

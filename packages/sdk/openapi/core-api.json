@@ -3967,6 +3967,16 @@
               }
             ]
           },
+          "accountStatus": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "firstName": {
             "type": "string"
           },
@@ -3992,6 +4002,7 @@
         "required": [
           "id",
           "accountId",
+          "accountStatus",
           "firstName",
           "lastName",
           "workEmail",

@@ -1021,6 +1021,7 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
           employee: {
             id: employee.id,
             accountId: account.id,
+            accountStatus: account.status,
             firstName: employee.firstName,
             lastName: employee.lastName,
             workEmail: employee.workEmail,

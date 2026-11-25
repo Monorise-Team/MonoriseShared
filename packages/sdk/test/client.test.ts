@@ -42,6 +42,7 @@ const ANNA_ME: Me = {
   employee: {
     id: ANNA_EMPLOYEE_ID,
     accountId: ANNA_ACCOUNT_ID,
+    accountStatus: "ACTIVE",
     firstName: "Anna",
     lastName: "Kowalska",
     workEmail: "anna@acme.test",
