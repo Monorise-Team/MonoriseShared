@@ -101,6 +101,45 @@ const canApprove = can(snapshot, "timotime.entries.approve", {
 
 Ten sam klient z odpowiednim tokenem maszynowym obsługuje też rejestrację manifestu przy wdrożeniu (`registerProductPermissions`, `registerProductRoleTemplates` z zakresem `core:permissions.register`) oraz katalog (`listProductDirectoryEmployees`, `listProductDirectoryUnitMembers` z zakresem `core:directory.read` i powtarzalnymi filtrami `employeeId` / `unitId`).
 
+## Klucz idempotentności i ponawianie żądań
+
+Każde żądanie `POST` dostaje automatycznie nagłówek `Idempotency-Key` z nowym identyfikatorem UUID v4. Jeśli wywołanie poda własny klucz w `headers` (w opcjach klienta albo pojedynczego wywołania, niezależnie od wielkości liter w nazwie nagłówka), klient zachowuje ten klucz. Żądania `GET`, `PUT`, `PATCH` i `DELETE` nie dostają automatycznego klucza.
+
+Core API zapamiętuje wynik dla klucza od MonoriseCore#30; wcześniej nagłówek jest pomijany, więc ponawianie `POST` może utworzyć drugi rekord. Do tego czasu nie włączaj `retry` dla operacji tworzących.
+
+Gdy opcja `retry` jest włączona, klient ponawia żądania z tym samym `Idempotency-Key`. Przykład: Anna dodaje pracownika w firmie Acme na słabym zasięgu mobilnym; pierwsza odpowiedź ginie po drodze, SDK ponawia żądanie z tym samym kluczem, a Core zwraca zapisany wynik (z nagłówkiem `Idempotency-Replayed: true`, który SDK traktuje jak zwykły sukces) — w firmie powstaje tylko jeden pracownik.
+
+```ts
+import { createCoreClient } from "@monorise-team/sdk";
+
+const core = createCoreClient({
+  baseUrl: "https://api.monorise.studio",
+  getAccessToken: () => session.accessToken,
+  retry: {
+    attempts: 3, // łączna liczba prób wraz z pierwszą (domyślnie 3, maks. 5)
+    baseDelayMs: 300, // baza wykładniczego odstępu z losowym rozrzutem (domyślnie 300 ms)
+    maxDelayMs: 5000, // górny limit odstępu i nagłówka Retry-After (domyślnie 5000 ms)
+  },
+});
+
+// Własny klucz dla konkretnego wywołania (np. zapisany w formularzu):
+const employee = await core.createEmployee({
+  body: { firstName: "Jan", lastName: "Nowak", workEmail: "jan@acme.test" },
+  headers: { "Idempotency-Key": formSubmissionId },
+});
+
+// Wyłączenie ponawiania dla pojedynczego wywołania:
+const health = await core.getHealth({ retry: false });
+```
+
+Zasady ponawiania:
+
+- Domyślnie `retry` jest wyłączone (`false`) — każde wywołanie wysyła dokładnie jedno żądanie. Opcja `retry` na pojedynczym wywołaniu nadpisuje ustawienie klienta.
+- Ponawiane są wyłącznie żądania `GET` oraz `POST` z nagłówkiem `Idempotency-Key`. Metody `PUT`, `PATCH` i `DELETE` nigdy nie są ponawiane.
+- Ponawianie działa wyłącznie przy błędzie sieci (gdy `fetch` odrzuca z powodu innego niż `AbortSignal`) oraz przy kodach `429`, `502`, `503` i `504`. Pozostałe błędy `4xx` (w tym `409 CONFLICT`) nigdy nie są ponawiane.
+- Dla `429` i `503` klient szanuje nagłówek `Retry-After` (sekundy lub data HTTP, z limitem `maxDelayMs`); w pozostałych przypadkach stosuje wykładnicze opóźnienie z losowym rozrzutem.
+- Przerwanie sygnałem `AbortSignal` natychmiast kończy oczekiwanie na kolejną próbę i odrzuca obietnicę z powodem przerwania. Po wyczerpaniu prób klient rzuca ten sam typ błędu co pojedyncze nieudane wywołanie (`CoreApiError`, `CoreApiUnavailableError` lub `CoreApiProtocolError`).
+
 ## Obsługa błędów
 
 Klient rozróżnia błędy zwrócone przez Core, błędy połączenia i niezgodność odpowiedzi z kontraktem:
