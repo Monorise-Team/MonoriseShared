@@ -1,2 +1,108 @@
-/** Wspólne testy zgodności produktów Monorise z Core (ADR-0046). Szkielet; implementacja w MonoriseShared#34. */
-export {};
+/**
+ * Wspólne testy zgodności produktów Monorise z Core (ADR-0046):
+ * wystawca kluczy i tokenów, atrapa Core, budowniczowie danych firmy,
+ * walidatory kontraktu, izolacji firm i OpenAPI oraz budowniczy zdarzeń.
+ */
+export {
+  applyOrganizationSpec,
+  type AccountStatus,
+  type AddEmployeeBaseInput,
+  type AddEmployeeWithAccountInput,
+  type AddEmployeeWithoutAccountInput,
+  type AddRoleInput,
+  type AddUnitInput,
+  type AddUnitMemberInput,
+  type AppAccessStatus,
+  type AssignRoleInput,
+  type CreatedEmployeeWithAccount,
+  type CreatedEmployeeWithoutAccount,
+  type CreateOrganizationInput,
+  type DeclarativeOrganizationSpec,
+  type DomainStatus,
+  type EmployeeStatus,
+  type EntitlementSourceType,
+  type EntitlementStatus,
+  type FakeAccountRecord,
+  type FakeAppAccessRecord,
+  type FakeDomainRecord,
+  type FakeEmployeeRecord,
+  type FakeEntitlementRecord,
+  type FakeOrganizationBuilder,
+  type FakeOrganizationData,
+  type FakeRoleAssignmentRecord,
+  type FakeRoleRecord,
+  type FakeUnitMembershipRecord,
+  type FakeUnitRecord,
+  type GrantEntitlementOptions,
+  type OrganizationStatus,
+  type OrganizationUserTokenOptions,
+  type SeededOrganization,
+  type UnitMembershipRole,
+  type UnitStatus,
+  type UnitType,
+} from "./builders.js";
+export {
+  checkAuthentication,
+  checkProductAccess,
+  defineProductContractTests,
+  type ContractSessionInput,
+  type MaybeLazy,
+  type ProductContractBaseConfig,
+  type ProductContractTestConfig,
+  type ProductRequestHandler,
+  type ProtectedRouteConfig,
+  type SessionCredentials,
+  type SessionFactory,
+} from "./contract.js";
+export {
+  checkErrorEnvelope,
+  errorDetailSchema,
+  errorEnvelopeSchema,
+  formatViolations,
+  type CheckErrorEnvelopeOptions,
+  type ContractCheckResult,
+  type ContractViolation,
+  type ErrorEnvelope,
+  type ErrorEnvelopeInput,
+} from "./envelope.js";
+export {
+  buildPermissionsChangedEvent,
+  type BuildPermissionsChangedEventInput,
+  type PermissionsChangedEvent,
+} from "./events.js";
+export {
+  CORE_DIRECTORY_READ_SCOPE,
+  CORE_PERMISSIONS_READ_SCOPE,
+  CORE_PERMISSIONS_REGISTER_SCOPE,
+  createFakeCore,
+  type CreateFakeCoreOptions,
+  type FakeCore,
+  type FakeCoreProductConfig,
+  type FakeCoreServerHandle,
+  type ListenOptions,
+  type RecordedPermissionsRegistration,
+  type RecordedRoleTemplatesRegistration,
+  type RoleTemplateManifestEntry,
+} from "./fake-core.js";
+export {
+  createTestIssuer,
+  type CreateTestIssuerOptions,
+  type GeneratedEd25519KeyPair,
+  type InvalidTokenHelpers,
+  type MissingOrgIdTokenInput,
+  type SignMachineTokenInput,
+  type SignUserTokenInput,
+  type TestIssuer,
+} from "./issuer.js";
+export {
+  checkOpenApiDocument,
+  type CheckOpenApiOptions,
+  type OpenApiDocumentInput,
+  type OperationMatcher,
+} from "./openapi.js";
+export {
+  checkTenantIsolation,
+  defineTenantIsolationTests,
+  type DefineTenantIsolationTestsOptions,
+  type TenantIsolationOptions,
+} from "./tenant-isolation.js";
