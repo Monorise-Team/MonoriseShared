@@ -407,6 +407,91 @@
   transform: none;
 }
 
+/* Okna i powiadomienia (#51) */
+@layer components {
+  .mr-animate-toast[data-state="open"] {
+    animation: mr-toast-in var(--mr-anim-normal) var(--mr-ease-out);
+  }
+
+  .mr-animate-toast[data-state="closed"] {
+    animation: mr-toast-out var(--mr-anim-exit) var(--mr-ease-in);
+  }
+
+  .mr-animate-toast[data-swipe="move"] {
+    transform: translate3d(var(--radix-toast-swipe-move-x, 0px), var(--radix-toast-swipe-move-y, 0px), 0);
+  }
+
+  .mr-animate-toast[data-swipe="cancel"] {
+    transform: translate3d(0, 0, 0);
+    transition: transform var(--mr-anim-fast) var(--mr-ease-out);
+  }
+
+  .mr-animate-toast[data-swipe="end"] {
+    animation: mr-toast-swipe-out var(--mr-anim-exit) var(--mr-ease-in);
+  }
+
+  .mr-toast-countdown {
+    animation-name: mr-toast-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+}
+
+@keyframes mr-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes mr-toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes mr-toast-swipe-out {
+  from {
+    transform: translate3d(var(--radix-toast-swipe-end-x, 0px), var(--radix-toast-swipe-end-y, 0px), 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(var(--radix-toast-swipe-end-x, 100%), var(--radix-toast-swipe-end-y, 0px), 0);
+  }
+}
+
+@keyframes mr-toast-countdown {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-animate-toast[data-state],
+  .mr-animate-toast[data-swipe="end"],
+  .mr-toast-countdown {
+    animation: none;
+  }
+
+  .mr-animate-toast[data-swipe="cancel"] {
+    transition: none;
+  }
+}
+
+:root.reduce-motion .mr-animate-toast[data-state],
+:root.reduce-motion .mr-animate-toast[data-swipe="end"],
+:root.reduce-motion .mr-toast-countdown {
+  animation: none;
+}
+
+:root.reduce-motion .mr-animate-toast[data-swipe="cancel"] {
+  transition: none;
+}
+
 /* Szkielet aplikacji i ustawienia (#52) */
 .mr-hide-scrollbar {
   scrollbar-width: none;
