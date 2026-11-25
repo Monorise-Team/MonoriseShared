@@ -29,6 +29,8 @@ export interface Accent {
   accent: string;
   accentHover: string;
   accentLight: string;
+  /** Kolor tekstu akcentu na jasnym szkle (w jasnym trybie ciemniejszy odcień hover, w ciemnym sam akcent). */
+  accentStrong: string;
   /** Tekst na wypełnionym akcencie: zawsze razem z `accent`. */
   accentFg: string;
   selected: string;
@@ -58,6 +60,7 @@ export const themes: Record<ThemeName, Theme> = {
         accent: "#27272a",
         accentHover: "#18181b",
         accentLight: "#e4e4e7",
+        accentStrong: "#18181b",
         accentFg: "#ffffff",
         selected: "rgba(39, 39, 42, 0.12)",
         link: "#27272a",
@@ -66,6 +69,7 @@ export const themes: Record<ThemeName, Theme> = {
         accent: "#e4e4e7",
         accentHover: "#d4d4d8",
         accentLight: "#3f3f46",
+        accentStrong: "#e4e4e7",
         accentFg: "#18181b",
         selected: "rgba(228, 228, 231, 0.18)",
         link: "#f4f4f5",
@@ -91,6 +95,7 @@ export const themes: Record<ThemeName, Theme> = {
         accent: "#0e7490",
         accentHover: "#155e75",
         accentLight: "#cff3f8",
+        accentStrong: "#155e75",
         accentFg: "#ffffff",
         selected: "rgba(14, 116, 144, 0.16)",
         link: "#0e7490",
@@ -99,6 +104,7 @@ export const themes: Record<ThemeName, Theme> = {
         accent: "#67d5e5",
         accentHover: "#3fb3c8",
         accentLight: "#164e63",
+        accentStrong: "#67d5e5",
         accentFg: "#04222b",
         selected: "rgba(76, 195, 217, 0.3)",
         link: "#a5e7f0",
@@ -124,17 +130,19 @@ export const themes: Record<ThemeName, Theme> = {
         accent: "#7c3aed",
         accentHover: "#6d28d9",
         accentLight: "#ede9fe",
+        accentStrong: "#6d28d9",
         accentFg: "#ffffff",
-        selected: "rgba(124, 58, 237, 0.14)",
+        selected: "rgba(237, 233, 254, 0.65)",
         link: "#7c3aed",
       },
       dark: {
         accent: "#a78bfa",
         accentHover: "#8b5cf6",
         accentLight: "#2e1065",
+        accentStrong: "#a78bfa",
         accentFg: "#2e1065",
-        selected: "rgba(167, 139, 250, 0.26)",
-        link: "#c4b5fd",
+        selected: "rgba(46, 16, 101, 0.55)",
+        link: "#a78bfa",
       },
     },
     backdrop: {
@@ -154,17 +162,19 @@ export const themes: Record<ThemeName, Theme> = {
     },
     accent: {
       light: {
-        accent: "#047857",
-        accentHover: "#065f46",
+        accent: "#14b886",
+        accentHover: "#047857",
         accentLight: "#d1fae5",
-        accentFg: "#ffffff",
-        selected: "rgba(4, 120, 87, 0.14)",
+        accentStrong: "#047857",
+        accentFg: "#022c22",
+        selected: "rgba(20, 184, 134, 0.18)",
         link: "#047857",
       },
       dark: {
         accent: "#4be3b0",
         accentHover: "#2dd4a0",
         accentLight: "#064e3b",
+        accentStrong: "#4be3b0",
         accentFg: "#022c22",
         selected: "rgba(45, 212, 160, 0.24)",
         link: "#7ef0c8",
@@ -199,10 +209,12 @@ export const semantic: Record<Mode, Record<string, string>> = {
     "danger-hover": "#b91c1c",
     "danger-solid": "#dc2626",
     "danger-solid-hover": "#b91c1c",
-    warning: "#b45309",
-    success: "#047857",
+    warning: "#d97706",
+    success: "#059669",
     "sidebar-bg": "rgb(var(--mr-tint-light) / 0.6)",
     "sidebar-text": "#0a1c26",
+    "sidebar-hover": "color-mix(in srgb, var(--mr-accent) 9%, transparent)",
+    "sidebar-active": "var(--mr-accent)",
     "surface-side": "rgb(var(--mr-tint-light) / 0.36)",
     "surface-middle": "rgb(var(--mr-tint-light) / 0.32)",
     "surface-reading": "rgb(var(--mr-tint-light-hi) / 0.5)",
@@ -228,7 +240,7 @@ export const semantic: Record<Mode, Record<string, string>> = {
     "text-tertiary": "#9fb6c1",
     "border-primary": "rgba(255, 255, 255, 0.12)",
     "border-secondary": "rgba(255, 255, 255, 0.07)",
-    danger: "#f87171",
+    danger: "#dc2626",
     "danger-hover": "#ef4444",
     "danger-solid": "#dc2626",
     "danger-solid-hover": "#b91c1c",
@@ -236,6 +248,8 @@ export const semantic: Record<Mode, Record<string, string>> = {
     success: "#34d399",
     "sidebar-bg": "rgb(var(--mr-tint-dark) / 0.32)",
     "sidebar-text": "#eaf3f7",
+    "sidebar-hover": "rgba(255, 255, 255, 0.07)",
+    "sidebar-active": "var(--mr-accent)",
     "surface-side": "rgb(var(--mr-tint-dark) / 0.32)",
     "surface-middle": "rgb(var(--mr-tint-dark) / 0.34)",
     "surface-reading": "rgb(var(--mr-tint-dark) / 0.5)",
@@ -264,7 +278,11 @@ export const effects: Record<Mode, Record<string, string>> = {
     "surface-float-filter": "blur(16px) saturate(160%)",
     "text-shadow-panel": "none",
     "text-shadow-middle": "none",
+    "backdrop-text-shadow": "none",
     "glow-primary": "drop-shadow(0 0 10px color-mix(in srgb, var(--mr-accent) 35%, transparent))",
+    "neon-gradient":
+      "linear-gradient(90deg, color-mix(in oklab, var(--mr-accent) 70%, black) 0%, var(--mr-accent) 55%, color-mix(in oklab, var(--mr-accent) 45%, white) 100%)",
+    "neon-glow": "0 0 8px color-mix(in srgb, var(--mr-accent) 40%, transparent)",
   },
   dark: {
     "card-shadow": "0 10px 30px rgba(0, 0, 0, 0.22)",
@@ -277,8 +295,55 @@ export const effects: Record<Mode, Record<string, string>> = {
     "surface-float-filter": "blur(16px) saturate(160%)",
     "text-shadow-panel": "0 1px 3px rgba(0, 0, 0, 0.55)",
     "text-shadow-middle": "0 1px 2px rgba(0, 0, 0, 0.85), 0 0 12px rgba(0, 0, 0, 0.45)",
+    "backdrop-text-shadow": "0 1px 3px rgba(0, 0, 0, 0.6)",
     "glow-primary": "drop-shadow(0 0 12px color-mix(in srgb, var(--mr-accent) 55%, transparent))",
+    "neon-gradient":
+      "linear-gradient(90deg, color-mix(in oklab, var(--mr-accent) 70%, black) 0%, var(--mr-accent) 55%, color-mix(in oklab, var(--mr-accent) 45%, white) 100%)",
+    "neon-glow": "0 0 8px color-mix(in srgb, var(--mr-accent) 45%, transparent)",
   },
+};
+
+/** Wzmocniony kolor tekstu pomocniczego na środkowej, najbardziej przezroczystej karcie w trybie ciemnym. */
+export const middleTextTertiary: Record<Mode, string> = {
+  light: "#365161",
+  dark: "#b9ccd5",
+};
+
+/** Warstwy nakładania (z-index): od zwykłej zawartości po dymki podpowiedzi. */
+export const zIndex = {
+  base: 0,
+  sticky: 10,
+  dropdown: 40,
+  overlay: 50,
+  modal: 60,
+  popover: 70,
+  toast: 80,
+  tooltip: 90,
+} as const;
+
+export type ZIndexLayer = keyof typeof zIndex;
+
+export type Density = "compact" | "default" | "spacious";
+export const densityNames = ["compact", "default", "spacious"] as const satisfies readonly Density[];
+export const defaultDensity: Density = "default";
+
+/** Gęstość wierszy listy (odstępy i rozmiar awatara w pikselach, zgodnie z ThreadCard w Aven). */
+export const density = {
+  compact: { rowPaddingX: 12, rowPaddingY: 6, avatarSize: 28 },
+  default: { rowPaddingX: 16, rowPaddingY: 12, avatarSize: 36 },
+  spacious: { rowPaddingX: 16, rowPaddingY: 16, avatarSize: 40 },
+} as const satisfies Record<Density, { rowPaddingX: number; rowPaddingY: number; avatarSize: number }>;
+
+export type FontScale = "small" | "default" | "large" | "xlarge";
+export const fontScaleNames = ["small", "default", "large", "xlarge"] as const satisfies readonly FontScale[];
+export const defaultFontScale: FontScale = "default";
+
+/** Skala rozmiaru tekstu na `<html>` (mnożnik dla Expo, procent dla CSS). */
+export const fontScale: Record<FontScale, number> = {
+  small: 0.82,
+  default: 1,
+  large: 1.18,
+  xlarge: 1.36,
 };
 
 /** Kształty: pływające karty z odstępem 10 px i zaokrągleniem 16 px. */

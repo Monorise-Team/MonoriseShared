@@ -28,7 +28,7 @@ export function Tooltip({ content, shortcut, side = "bottom", children, classNam
           side={side}
           sideOffset={6}
           className={cn(
-            "mr-float mr-animate-menu z-50 flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-text-primary",
+            "mr-float mr-animate-menu z-[var(--mr-z-tooltip)] flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-text-primary",
             className,
           )}
         >

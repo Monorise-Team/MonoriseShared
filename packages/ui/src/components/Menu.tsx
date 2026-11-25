@@ -16,7 +16,10 @@ export function MenuContent({ className, sideOffset = 6, ...rest }: ComponentPro
     <DropdownMenu.Portal>
       <DropdownMenu.Content
         sideOffset={sideOffset}
-        className={cn("mr-menu mr-animate-menu z-50 min-w-44 p-1 text-sm text-text-primary", className)}
+        className={cn(
+          "mr-menu mr-animate-menu z-[var(--mr-z-dropdown)] min-w-44 p-1 text-sm text-text-primary",
+          className,
+        )}
         {...rest}
       />
     </DropdownMenu.Portal>

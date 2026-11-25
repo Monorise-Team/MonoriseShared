@@ -36,10 +36,10 @@ interface ItemContent {
 
 const itemClass = (active: boolean | undefined) =>
   cn(
-    "mr-row mr-press flex h-8 w-full items-center gap-2.5 px-2 text-left text-sm outline-none [&_svg]:size-4 [&_svg]:shrink-0",
+    "mr-row mr-press mr-nav-indicator flex h-8 w-full items-center gap-2.5 px-2 text-left text-sm outline-none [&_svg]:size-4 [&_svg]:shrink-0",
     active
-      ? "bg-bg-selected font-medium text-text-primary [&_svg]:text-accent"
-      : "text-sidebar-text hover:bg-bg-hover [&_svg]:text-text-tertiary",
+      ? "bg-bg-selected font-medium text-accent-strong [&_svg]:text-accent-strong"
+      : "text-sidebar-text hover:bg-sidebar-hover [&_svg]:text-text-tertiary",
   );
 
 function Content({ icon, label, count, active }: ItemContent) {
@@ -61,6 +61,7 @@ export function SidebarItem({ icon, label, count, active, className, ...rest }: 
     <button
       type="button"
       aria-current={active ? "page" : undefined}
+      data-active={active || undefined}
       className={cn(itemClass(active), className)}
       {...rest}
     >
@@ -75,7 +76,12 @@ export type SidebarLinkProps = ItemContent &
 /** Pozycja nawigacji jako link. */
 export function SidebarLink({ icon, label, count, active, className, ...rest }: SidebarLinkProps) {
   return (
-    <a aria-current={active ? "page" : undefined} className={cn(itemClass(active), className)} {...rest}>
+    <a
+      aria-current={active ? "page" : undefined}
+      data-active={active || undefined}
+      className={cn(itemClass(active), className)}
+      {...rest}
+    >
       <Content icon={icon} label={label} count={count} active={active} />
     </a>
   );

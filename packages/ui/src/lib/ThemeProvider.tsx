@@ -5,6 +5,7 @@ import {
   APPEARANCE_STORAGE_KEY,
   applyAppearance,
   defaultAppearance,
+  normalizeAppearance,
   readAppearance,
   resolveMode,
   type Appearance,
@@ -40,7 +41,9 @@ function storage(): Storage | undefined {
  * w localStorage i ustawia klasy na <html>. Jedna instancja na aplikację.
  */
 export function ThemeProvider({ children, initial }: { children: ReactNode; initial?: Partial<Appearance> }) {
-  const [appearance, setState] = useState<Appearance>(() => ({ ...readAppearance(storage()), ...initial }));
+  const [appearance, setState] = useState<Appearance>(() =>
+    normalizeAppearance({ ...readAppearance(storage()), ...initial }),
+  );
   const [systemDark, setSystemDark] = useState(systemPrefersDark);
 
   useEffect(() => {
@@ -61,7 +64,7 @@ export function ThemeProvider({ children, initial }: { children: ReactNode; init
       resolvedMode: resolveMode(appearance.mode, systemDark),
       setAppearance: (change) =>
         setState((current) => {
-          const next = { ...current, ...change };
+          const next = normalizeAppearance({ ...current, ...change });
           try {
             storage()?.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(next));
           } catch {

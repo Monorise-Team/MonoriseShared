@@ -16,7 +16,9 @@
     "registry": "https://npm.pkg.github.com"
   },
   "files": [
-    "dist"
+    "dist",
+    "assets",
+    "NOTICE"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,7 +27,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./wallpapers/*": "./assets/wallpapers/*"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-css.mjs",

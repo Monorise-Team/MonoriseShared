@@ -32,7 +32,7 @@ export function ListItem({
       type="button"
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "mr-row mr-press flex w-full items-start gap-3 px-3 py-2.5 text-left outline-none",
+        "mr-row mr-press flex w-full items-start gap-3 px-[var(--mr-row-px)] py-[var(--mr-row-py)] text-left outline-none",
         selected ? "bg-bg-selected" : "hover:bg-row-hover",
         className,
       )}

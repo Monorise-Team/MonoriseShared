@@ -1,12 +1,20 @@
 export { cn } from "./lib/cn.js";
 export {
   APPEARANCE_STORAGE_KEY,
+  WALLPAPER_BLUR_MAX,
+  WALLPAPER_DIM_MAX,
   appearanceInitScript,
   applyAppearance,
+  backdropModes,
   defaultAppearance,
+  defaultBackdrop,
+  normalizeAppearance,
   readAppearance,
   resolveMode,
   type Appearance,
+  type BackdropMode,
+  type Density,
+  type FontScale,
   type ModePreference,
 } from "./lib/appearance.js";
 export { ThemeProvider, useTheme } from "./lib/ThemeProvider.js";
@@ -32,6 +40,8 @@ export {
   Separator,
   TitleBar,
   Toolbar,
+  WALLPAPER_URLS,
+  type AppBackdropProps,
   type AppShellProps,
   type TitleBarProps,
 } from "./components/Layout.js";

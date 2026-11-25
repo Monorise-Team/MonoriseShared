@@ -29,6 +29,10 @@
     background-attachment: fixed;
   }
 
+  button {
+    text-shadow: inherit;
+  }
+
   :where(
     button,
     a,
@@ -54,13 +58,57 @@
 }
 
 @layer components {
-  /* Tło pod kartami */
+  /* Tło pod kartami: gradient CSS pełni rolę tła zastępczego podczas ładowania tapety i w trybie `gradient` */
   .mr-backdrop {
     position: fixed;
     inset: 0;
     z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
     background: var(--mr-backdrop);
     color: var(--mr-backdrop-fg);
+  }
+
+  .mr-backdrop-image {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    filter: var(--mr-wallpaper-tone, brightness(1));
+  }
+
+  .mr-backdrop-image.is-blurred {
+    filter: var(--mr-wallpaper-tone, brightness(1)) blur(var(--mr-wallpaper-blur, 0px));
+    transform: scale(1.06);
+  }
+
+  .mr-backdrop-dim {
+    position: absolute;
+    inset: 0;
+    background: rgb(var(--mr-tint-light) / var(--mr-wallpaper-dim, 0));
+  }
+
+  .dark .mr-backdrop-dim {
+    background: rgb(var(--mr-tint-dark) / var(--mr-wallpaper-dim, 0));
+  }
+
+  .mr-backdrop:not(.mr-backdrop-gradient)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgb(var(--mr-tint-light) / 0.3);
+  }
+
+  .dark .mr-backdrop:not(.mr-backdrop-gradient)::after {
+    background:
+      linear-gradient(to bottom, rgba(4, 12, 20, 0.4), transparent 64px),
+      radial-gradient(
+        circle at 41% 12%,
+        rgba(4, 12, 20, 0.55) 0,
+        rgba(4, 12, 20, 0.45) max(20vh, 11.5vw),
+        transparent max(40vh, 23vw)
+      );
   }
 
   /* Pływająca szklana karta (pasek boczny, lista, czytanie, strony) */
@@ -83,6 +131,11 @@
     backdrop-filter: var(--mr-surface-middle-filter);
     -webkit-backdrop-filter: var(--mr-surface-middle-filter);
     text-shadow: var(--mr-text-shadow-middle);
+  }
+
+  /* Środkowa karta jest najbardziej przezroczysta: w trybie ciemnym podnosimy kontrast tekstu pomocniczego */
+  .dark .mr-middle {
+    --mr-text-tertiary: var(--mr-middle-text-tertiary, #b9ccd5);
   }
 
   .mr-reading {
@@ -129,6 +182,25 @@
     border-radius: var(--mr-row-radius);
   }
 
+  /* Wskaźnik aktywnej pozycji w nawigacji bocznej */
+  .mr-nav-indicator {
+    position: relative;
+  }
+
+  .mr-nav-indicator[data-active]::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    width: 3px;
+    height: 18px;
+    margin-top: -9px;
+    border-radius: 999px;
+    background: var(--mr-accent);
+    pointer-events: none;
+    animation: mr-indicator-in var(--mr-anim-enter) var(--mr-ease-out) backwards;
+  }
+
   .mr-glow {
     filter: var(--mr-glow-primary);
   }
@@ -138,8 +210,8 @@
   }
 
   .mr-progress-fill {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--mr-accent) 70%, transparent), var(--mr-accent));
-    box-shadow: 0 0 8px color-mix(in srgb, var(--mr-accent) 40%, transparent);
+    background: var(--mr-neon-gradient);
+    box-shadow: var(--mr-neon-glow);
   }
 
   .mr-progress-indeterminate {
@@ -149,10 +221,12 @@
   /* Tekst wprost na tle (np. pasek tytułu) */
   .mr-backdrop-text {
     color: var(--mr-backdrop-fg);
+    text-shadow: var(--mr-backdrop-text-shadow);
   }
 
-  /* Pole tekstowe i przyciski nie dziedziczą cienia tekstu ze szkła */
+  /* Pole tekstowe i przyciski na pełnym akcencie nie dziedziczą cienia tekstu ze szkła */
   .mr-no-text-shadow,
+  .bg-accent,
   input,
   textarea,
   select {
@@ -196,6 +270,15 @@
   }
 }
 
+/* Tryb jasny: wypłowienie ciemnej tapety do pastelu i mocniejszy odcień tekstu akcentu */
+:root:not(.dark) .mr-backdrop-image {
+  --mr-wallpaper-tone: contrast(0.58) brightness(1.4) saturate(0.85);
+}
+
+:root:not(.dark) .text-accent {
+  color: var(--mr-accent-strong);
+}
+
 @keyframes mr-fade-in {
   from {
     opacity: 0;
@@ -236,6 +319,13 @@
   }
 }
 
+@keyframes mr-indicator-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+}
+
 @keyframes mr-progress-slide {
   0% {
     transform: translateX(-100%);
@@ -262,6 +352,11 @@
   background-color: var(--mr-bg-primary);
 }
 
+:root.no-glass .mr-backdrop-image.is-blurred {
+  filter: var(--mr-wallpaper-tone, brightness(1));
+  transform: none;
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .mr-side,
   .mr-middle,
@@ -270,14 +365,44 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .mr-progress-indeterminate {
-    animation: none;
+  .mr-menu,
+  .mr-float,
+  .mr-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .mr-backdrop-image.is-blurred {
+    filter: var(--mr-wallpaper-tone, brightness(1));
+    transform: none;
   }
 }
 
-:root.reduce-motion .mr-progress-indeterminate {
+@media (prefers-reduced-motion: reduce) {
+  .mr-progress-indeterminate,
+  .mr-nav-indicator[data-active]::before,
+  .mr-animate-overlay[data-state],
+  .mr-animate-panel[data-state],
+  .mr-animate-menu[data-state],
+  .mr-enter {
+    animation: none;
+  }
+
+  .mr-press:not(:disabled):active {
+    transform: none;
+  }
+}
+
+:root.reduce-motion .mr-progress-indeterminate,
+:root.reduce-motion .mr-nav-indicator[data-active]::before,
+:root.reduce-motion .mr-animate-overlay[data-state],
+:root.reduce-motion .mr-animate-panel[data-state],
+:root.reduce-motion .mr-animate-menu[data-state],
+:root.reduce-motion .mr-enter {
   animation: none;
+}
+
+:root.reduce-motion .mr-press:not(:disabled):active {
+  transform: none;
 }
