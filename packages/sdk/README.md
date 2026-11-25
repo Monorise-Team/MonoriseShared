@@ -105,6 +105,8 @@ Ten sam klient z odpowiednim tokenem maszynowym obsługuje też rejestrację man
 
 Każde żądanie `POST` dostaje automatycznie nagłówek `Idempotency-Key` z nowym identyfikatorem UUID v4. Jeśli wywołanie poda własny klucz w `headers` (w opcjach klienta albo pojedynczego wywołania, niezależnie od wielkości liter w nazwie nagłówka), klient zachowuje ten klucz. Żądania `GET`, `PUT`, `PATCH` i `DELETE` nie dostają automatycznego klucza.
 
+Core API zapamiętuje wynik dla klucza od MonoriseCore#30; wcześniej nagłówek jest pomijany, więc ponawianie `POST` może utworzyć drugi rekord. Do tego czasu nie włączaj `retry` dla operacji tworzących.
+
 Gdy opcja `retry` jest włączona, klient ponawia żądania z tym samym `Idempotency-Key`. Przykład: Anna dodaje pracownika w firmie Acme na słabym zasięgu mobilnym; pierwsza odpowiedź ginie po drodze, SDK ponawia żądanie z tym samym kluczem, a Core zwraca zapisany wynik (z nagłówkiem `Idempotency-Replayed: true`, który SDK traktuje jak zwykły sukces) — w firmie powstaje tylko jeden pracownik.
 
 ```ts
