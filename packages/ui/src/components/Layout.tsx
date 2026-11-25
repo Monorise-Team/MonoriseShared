@@ -3,9 +3,8 @@
 import type { ThemeName } from "@monorise-team/tokens";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
-import { WALLPAPER_BLUR_MAX, WALLPAPER_DIM_MAX, type BackdropMode } from "../lib/appearance.js";
+import { WALLPAPER_BLUR_MAX, WALLPAPER_BLUR_SCALE, WALLPAPER_DIM_MAX, type BackdropMode } from "../lib/appearance.js";
 import { cn } from "../lib/cn.js";
-import { useTheme } from "../lib/ThemeProvider.js";
 
 /** Ścieżki do wbudowanych tapet doliny dla każdego motywu (z projektu aven-mail). */
 export const WALLPAPER_URLS: Record<ThemeName, string> = {
@@ -16,13 +15,13 @@ export const WALLPAPER_URLS: Record<ThemeName, string> = {
 };
 
 export interface AppBackdropProps extends HTMLAttributes<HTMLDivElement> {
-  /** Rodzaj tła: tapeta motywu (domyślnie) albo zastępczy gradient CSS. */
+  /** Rodzaj tła: tapeta motywu albo zastępczy gradient CSS; domyślnie z ustawień wyglądu (`data-backdrop` na <html>). */
   backdrop?: BackdropMode;
-  /** Motyw tapety; domyślnie pobierany z ThemeProvider. */
+  /** Motyw tapety; domyślnie z ustawień wyglądu (`data-theme` na <html>). */
   theme?: ThemeName;
-  /** Przyciemnienie albo rozjaśnienie tapety w procentach (0–80). */
+  /** Przyciemnienie albo rozjaśnienie tapety w procentach (0–80); domyślnie z ustawień wyglądu. */
   dim?: number;
-  /** Rozmycie tapety w pikselach (0–24). */
+  /** Rozmycie tapety w pikselach (0–24); domyślnie z ustawień wyglądu. */
   blur?: number;
 }
 
@@ -31,40 +30,41 @@ function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(max, Math.round(value)));
 }
 
-/** Tło pod szklanymi kartami, pod całym widokiem: tapeta motywu z gradientem w tle podczas ładowania. */
-export function AppBackdrop({ backdrop, theme, dim, blur, className, style, ...rest }: AppBackdropProps) {
-  const { appearance } = useTheme();
-  const activeBackdrop = backdrop ?? appearance.backdrop;
-  const activeTheme = theme ?? appearance.theme;
-  const activeDim = clamp(dim ?? appearance.wallpaperDim, WALLPAPER_DIM_MAX);
-  const activeBlur = clamp(blur ?? appearance.wallpaperBlur, WALLPAPER_BLUR_MAX);
-  const isGradient = activeBackdrop === "gradient";
+/** Adresy wszystkich tapet jako zmienne CSS; przeglądarka pobiera tylko tę, której używa reguła motywu. */
+const WALLPAPER_VARS = Object.fromEntries(
+  (Object.keys(WALLPAPER_URLS) as ThemeName[]).map((name) => [
+    `--mr-wallpaper-${name}`,
+    `url("${WALLPAPER_URLS[name]}")`,
+  ]),
+);
 
-  const backdropVars: CSSProperties | undefined =
-    activeDim > 0 || activeBlur > 0
-      ? ({
-          "--mr-wallpaper-dim": activeDim / 100,
-          "--mr-wallpaper-blur": `${activeBlur}px`,
-          ...style,
-        } as CSSProperties)
-      : style;
+/**
+ * Tło pod szklanymi kartami, pod całym widokiem: tapeta motywu z gradientem w tle podczas ładowania.
+ * Bez własnych ustawień tapetę, tryb tła, przyciemnienie i rozmycie wybiera CSS z atrybutów i zmiennych
+ * na <html> (`applyAppearance`, `appearanceInitScript`), więc HTML z serwera nie zależy od zapisanego wyglądu.
+ */
+export function AppBackdrop({ backdrop, theme, dim, blur, className, style, ...rest }: AppBackdropProps) {
+  const isGradient = backdrop === "gradient";
+  const vars: Record<string, string | number> = { ...WALLPAPER_VARS };
+  if (theme) vars["--mr-wallpaper-image"] = `url("${WALLPAPER_URLS[theme]}")`;
+  if (dim !== undefined) vars["--mr-wallpaper-dim"] = clamp(dim, WALLPAPER_DIM_MAX) / 100;
+  if (blur !== undefined) {
+    const activeBlur = clamp(blur, WALLPAPER_BLUR_MAX);
+    vars["--mr-wallpaper-blur"] = `${activeBlur}px`;
+    vars["--mr-wallpaper-scale"] = activeBlur > 0 ? WALLPAPER_BLUR_SCALE : 1;
+  }
 
   return (
     <div
       aria-hidden
-      data-backdrop={activeBackdrop}
-      data-wallpaper={activeTheme}
+      data-backdrop={backdrop}
+      data-wallpaper={theme}
       className={cn("mr-backdrop", isGradient && "mr-backdrop-gradient", className)}
-      style={backdropVars}
+      style={{ ...vars, ...style } as CSSProperties}
       {...rest}
     >
-      {!isGradient ? (
-        <div
-          className={cn("mr-backdrop-image", activeBlur > 0 && "is-blurred")}
-          style={{ backgroundImage: `url("${WALLPAPER_URLS[activeTheme]}")` }}
-        />
-      ) : null}
-      {activeDim > 0 ? <div className="mr-backdrop-dim" /> : null}
+      {!isGradient ? <div className="mr-backdrop-image" /> : null}
+      <div className="mr-backdrop-dim" />
     </div>
   );
 }

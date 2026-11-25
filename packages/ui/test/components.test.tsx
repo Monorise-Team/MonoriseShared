@@ -1,9 +1,11 @@
 import { themeNames } from "@monorise-team/tokens";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useState } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APPEARANCE_STORAGE_KEY,
   AppBackdrop,
@@ -37,6 +39,7 @@ function resetDocumentAndStorage() {
   delete root.dataset.backdrop;
   delete root.dataset.fontScale;
   delete root.dataset.density;
+  root.removeAttribute("style");
   window.localStorage.clear();
 }
 
@@ -266,11 +269,16 @@ describe("wygląd i AppBackdrop", () => {
         backdrop: "gradient",
         fontScale: "small",
         density: "compact",
+        wallpaperDim: 90,
+        wallpaperBlur: 12,
         reduceMotion: true,
         glass: false,
       }),
     );
     new Function(appearanceInitScript)();
+    expect(document.documentElement.style.getPropertyValue("--mr-wallpaper-dim")).toBe("0.8");
+    expect(document.documentElement.style.getPropertyValue("--mr-wallpaper-blur")).toBe("12px");
+    expect(document.documentElement.style.getPropertyValue("--mr-wallpaper-scale")).toBe("1.06");
     const root = document.documentElement;
     expect(root).not.toHaveClass("dark");
     expect(root).toHaveClass("reduce-motion", "no-glass");
@@ -323,43 +331,110 @@ describe("wygląd i AppBackdrop", () => {
     expect(document.documentElement.dataset.density).toBe("spacious");
   });
 
-  it.each(themeNames)("AppBackdrop renderuje tapetę motywu %s", (theme) => {
+  it("AppBackdrop bez ustawień podaje adresy wszystkich tapet, a wybór zostawia CSS", () => {
     const { container } = render(
-      <ThemeProvider initial={{ theme }}>
-        <AppBackdrop />
-      </ThemeProvider>,
-    );
-    const backdrop = container.querySelector(".mr-backdrop");
-    const image = container.querySelector<HTMLElement>(".mr-backdrop-image");
-    expect(backdrop).toHaveAttribute("data-backdrop", "wallpaper");
-    expect(backdrop).toHaveAttribute("data-wallpaper", theme);
-    expect(image).not.toBeNull();
-    expect(image!.style.backgroundImage).toContain(WALLPAPER_URLS[theme]);
-    expect(image!.style.backgroundImage).toContain(`${theme}.jpg`);
-  });
-
-  it("AppBackdrop renderuje zapasowy gradient oraz przyciemnienie i rozmycie", () => {
-    const { container, rerender } = render(
       <ThemeProvider initial={{ theme: "moonlight", wallpaperDim: 40, wallpaperBlur: 16 }}>
         <AppBackdrop />
       </ThemeProvider>,
     );
-    const backdrop = container.querySelector<HTMLElement>(".mr-backdrop");
-    const image = container.querySelector<HTMLElement>(".mr-backdrop-image");
-    const dim = container.querySelector<HTMLElement>(".mr-backdrop-dim");
-    expect(image).toHaveClass("is-blurred");
-    expect(dim).not.toBeNull();
-    expect(backdrop!.style.getPropertyValue("--mr-wallpaper-dim")).toBe("0.4");
-    expect(backdrop!.style.getPropertyValue("--mr-wallpaper-blur")).toBe("16px");
+    const backdrop = container.querySelector<HTMLElement>(".mr-backdrop")!;
+    for (const theme of themeNames) {
+      expect(backdrop.style.getPropertyValue(`--mr-wallpaper-${theme}`)).toBe(`url("${WALLPAPER_URLS[theme]}")`);
+      expect(WALLPAPER_URLS[theme]).toContain(`${theme}.jpg`);
+    }
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-image")).toBe("");
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-dim")).toBe("");
+    expect(backdrop).not.toHaveAttribute("data-backdrop");
+    expect(backdrop).not.toHaveAttribute("data-wallpaper");
+    expect(container.querySelector(".mr-backdrop-image")).not.toBeNull();
+    expect(container.querySelector(".mr-backdrop-dim")).not.toBeNull();
 
-    rerender(
-      <ThemeProvider initial={{ theme: "moonlight", backdrop: "gradient" }}>
-        <AppBackdrop backdrop="gradient" />
-      </ThemeProvider>,
-    );
+    // Wygląd trafia na <html>, skąd biorą go reguły CSS tapety
+    const root = document.documentElement;
+    expect(root.dataset.theme).toBe("moonlight");
+    expect(root.style.getPropertyValue("--mr-wallpaper-dim")).toBe("0.4");
+    expect(root.style.getPropertyValue("--mr-wallpaper-blur")).toBe("16px");
+    expect(root.style.getPropertyValue("--mr-wallpaper-scale")).toBe("1.06");
+  });
+
+  it.each(themeNames)("AppBackdrop z własnym motywem %s ustawia jego tapetę", (theme) => {
+    const { container } = render(<AppBackdrop theme={theme} />);
+    const backdrop = container.querySelector<HTMLElement>(".mr-backdrop")!;
+    expect(backdrop).toHaveAttribute("data-wallpaper", theme);
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-image")).toBe(`url("${WALLPAPER_URLS[theme]}")`);
+  });
+
+  it("AppBackdrop z własnym przyciemnieniem, rozmyciem i gradientem", () => {
+    const { container, rerender } = render(<AppBackdrop dim={40} blur={16} />);
+    const backdrop = container.querySelector<HTMLElement>(".mr-backdrop")!;
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-dim")).toBe("0.4");
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-blur")).toBe("16px");
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-scale")).toBe("1.06");
+
+    rerender(<AppBackdrop dim={500} blur={0} />);
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-dim")).toBe("0.8");
+    expect(backdrop.style.getPropertyValue("--mr-wallpaper-scale")).toBe("1");
+
+    rerender(<AppBackdrop backdrop="gradient" />);
     expect(container.querySelector(".mr-backdrop")).toHaveClass("mr-backdrop-gradient");
     expect(container.querySelector(".mr-backdrop")).toHaveAttribute("data-backdrop", "gradient");
     expect(container.querySelector(".mr-backdrop-image")).toBeNull();
+  });
+
+  it("render z serwera zgadza się z hydratacją mimo zapisanego wyglądu", async () => {
+    window.localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ theme: "moonlight", wallpaperDim: 30, fontScale: "large" }),
+    );
+    function Probe() {
+      const { appearance } = useTheme();
+      return <span data-testid="theme">{`${appearance.theme}/${appearance.wallpaperDim}`}</span>;
+    }
+    const tree = (
+      <ThemeProvider>
+        <AppBackdrop />
+        <Probe />
+      </ThemeProvider>
+    );
+
+    const html = renderToString(tree);
+    expect(html).toContain(`${defaultAppearance.theme}/0`);
+    expect(html).not.toContain("moonlight/30");
+
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.append(container);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const recoverable = vi.fn();
+    const root = await act(async () => hydrateRoot(container, tree, { onRecoverableError: recoverable }));
+    try {
+      expect(recoverable).not.toHaveBeenCalled();
+      expect(errors).not.toHaveBeenCalled();
+      expect(container.querySelector('[data-testid="theme"]')).toHaveTextContent("moonlight/30");
+      expect(document.documentElement.dataset.theme).toBe("moonlight");
+      expect(document.documentElement.dataset.fontScale).toBe("large");
+    } finally {
+      errors.mockRestore();
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("ThemeProvider idzie za zmianą wyglądu w innej karcie", () => {
+    function Probe() {
+      return <span data-testid="theme">{useTheme().appearance.theme}</span>;
+    }
+    render(
+      <ThemeProvider>
+        <Probe />
+      </ThemeProvider>,
+    );
+    expect(screen.getByTestId("theme")).toHaveTextContent(defaultAppearance.theme);
+    act(() => {
+      window.localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ theme: "emerald" }));
+      window.dispatchEvent(new StorageEvent("storage", { key: APPEARANCE_STORAGE_KEY }));
+    });
+    expect(screen.getByTestId("theme")).toHaveTextContent("emerald");
   });
 
   it("styles.css zawiera reguły aven-mail dla .mr-middle, wypłowienia, rozmycia i no-glass", () => {
@@ -368,7 +443,13 @@ describe("wygląd i AppBackdrop", () => {
     expect(css).toContain("var(--mr-middle-text-tertiary, #b9ccd5)");
     expect(css).toContain("contrast(0.58) brightness(1.4) saturate(0.85)");
     expect(css).toContain("transform: scale(1.06);");
-    expect(css).toContain(":root.no-glass .mr-backdrop-image.is-blurred");
+    expect(css).toContain("transform: scale(var(--mr-wallpaper-scale, 1));");
+    expect(css).toContain(":root.no-glass .mr-backdrop-image");
+    // Domyślna tapeta w CSS to domyślny motyw z tokenów, a każdy motyw ma swoją regułę
+    expect(css).toContain(`--mr-wallpaper-image: var(--mr-wallpaper-${defaultAppearance.theme});`);
+    for (const theme of themeNames) {
+      expect(css).toContain(`:root[data-theme="${theme}"] .mr-backdrop {`);
+    }
     expect(css).toContain("@media (prefers-reduced-transparency: reduce)");
   });
 });

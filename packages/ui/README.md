@@ -15,7 +15,20 @@ Załaduj style po Tailwind CSS 4 i owiń aplikację w `ThemeProvider`:
 import { AppShell, Button, Card, ThemeProvider, TooltipProvider } from "@monorise-team/ui";
 ```
 
-Przed pierwszym malowaniem (np. w `<head>`) możesz wstawić `appearanceInitScript`, żeby strona od razu miała właściwy tryb, motyw i skalę tekstu.
+Przed pierwszym malowaniem (np. w `<head>`) możesz wstawić `appearanceInitScript`, żeby strona od razu miała właściwy tryb, motyw, tapetę i skalę tekstu.
+
+W aplikacji renderowanej na serwerze (Next.js) skrypt jest obowiązkowy, a `<html>` dostaje `suppressHydrationWarning`, bo skrypt zmienia jego klasy, atrybuty i zmienne przed hydratacją:
+
+```tsx
+<html lang="pl" className="dark" data-theme="mono" suppressHydrationWarning>
+  <head>
+    <script dangerouslySetInnerHTML={{ __html: appearanceInitScript }} />
+  </head>
+  …
+</html>
+```
+
+`ThemeProvider` renderuje na serwerze i podczas hydratacji wygląd domyślny, a zapisany zaraz po niej, więc HTML z serwera zgadza się z pierwszym renderem w przeglądarce. `AppBackdrop` bez własnych ustawień nie zależy od zapisanego wyglądu: tapetę, tryb tła, przyciemnienie i rozmycie wybiera CSS z `data-theme`, `data-backdrop` i zmiennych `--mr-wallpaper-*` na `<html>`. Zmiana wyglądu w jednej karcie przechodzi do pozostałych kart aplikacji.
 
 ## Szklane karty i warstwy
 
