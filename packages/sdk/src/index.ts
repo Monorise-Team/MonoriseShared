@@ -71,6 +71,8 @@ export type Permission = components["schemas"]["Permission"];
 export type PermissionGrant = components["schemas"]["PermissionGrant"];
 export type PermissionManifestEntry = components["schemas"]["PermissionManifestEntry"];
 export type PermissionSnapshot = components["schemas"]["PermissionSnapshot"];
+/** Zdarzenie w kanale produktu (ADR-0100): koperta z `@monorise-team/events` plus numer `sequence`. */
+export type ProductEvent = components["schemas"]["ProductEventList"][number];
 export type ProductKey = components["schemas"]["ProductKey"];
 export type PutUnitMember = components["schemas"]["PutUnitMember"];
 export type RegisterPermissionsRequest = components["schemas"]["RegisterPermissionsRequest"];

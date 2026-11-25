@@ -324,6 +324,41 @@ describe("createCoreClient", () => {
     );
   });
 
+  it("reads the product event feed with a machine token and the numeric cursor", async () => {
+    const event = {
+      sequence: "42",
+      id: "01936f4e-5000-7000-8000-000000000001",
+      type: "organization.permissions.changed",
+      version: 1,
+      source: "core" as const,
+      organizationId: ORG_ID,
+      resourceType: "account",
+      resourceId: JAN_ACCOUNT_ID,
+      resourceVersion: 7,
+      occurredAt: "2026-11-25T10:00:00.000Z",
+      data: { authzRevision: 7 },
+    };
+    const fetchMock = vi.fn<FetchFunction>(async () =>
+      jsonResponse({ data: [event], meta: { requestId: "req_1", nextCursor: null }, error: null }),
+    );
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => MACHINE_TOKEN,
+      fetch: fetchMock,
+    });
+
+    // Serwer TimoTime pyta o zdarzenia po numerze 41 (ostatnio przetworzone)
+    const page = await core.listProductEvents({
+      path: { productKey: "timotime" },
+      query: { cursor: "41", limit: 100 },
+    });
+    expect(page).toEqual({ items: [event], nextCursor: null });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://localhost:3200/core/v1/products/timotime/events?cursor=41&limit=100",
+    );
+    expectTypeOf(page.items[0]!.sequence).toEqualTypeOf<string>();
+  });
+
   it("lists, creates, resends and revokes employee invitations", async () => {
     const invitation: Invitation = {
       id: "01936f4e-4000-7000-8000-000000000001",
