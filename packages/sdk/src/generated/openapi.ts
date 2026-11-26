@@ -113,6 +113,46 @@ export interface paths {
         patch: operations["updateEmployee"];
         trace?: never;
     };
+    "/core/v1/employees/{employeeId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Wyłącz konto pracownika
+         * @description Blokuje logowanie konta pracownika (`Account.status = DEACTIVATED`), usuwa wszystkie jego sesje logowania oraz tokeny dostępu i odświeżania OAuth (także obrócone w 20-sekundowym oknie powtórki), cofa ewentualne oczekujące zaproszenia tego konta, podbija `authzRevision`, emituje zdarzenie `organization.permissions.changed` i zapisuje wpis audytu `account.deactivated`. Status zatrudnienia pracownika (`Employee.status`), przypisania ról, członkostwa w jednostkach i dostępy do aplikacji (`AppAccess`) pozostają zachowane. Operacja jest idempotentna w skutkach: ponowne wywołanie dla już wyłączonego konta zwraca bieżący stan bez kolejnego zdarzenia ani podbicia `authzRevision`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera; odrzuca (`409 CONFLICT`) konto Ownera, własne konto wywołującego, pracownika bez konta, konto `INVITED` oraz pracownika `ANONYMIZED`.
+         */
+        post: operations["deactivateEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/employees/{employeeId}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Przywróć konto pracownika
+         * @description Włącza ponownie wyłączone konto pracownika (`Account.status = ACTIVE`, czyści `deactivatedAt`), podbija `authzRevision`, emituje zdarzenie `organization.permissions.changed` i zapisuje wpis audytu `account.reactivated`. Zachowane przypisania ról i dostępy do aplikacji (`AppAccess`) od razu wracają do działania. Operacja jest idempotentna w skutkach: ponowne wywołanie dla już aktywnego konta zwraca bieżący stan bez kolejnego zdarzenia ani podbicia `authzRevision`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera; odrzuca (`409 CONFLICT`) konto Ownera, własne konto wywołującego, pracownika bez konta, konto `INVITED` oraz pracownika `ANONYMIZED`.
+         */
+        post: operations["reactivateEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/core/v1/entitlements": {
         parameters: {
             query?: never;
@@ -1678,6 +1718,188 @@ export interface operations {
                 };
             };
             /** @description Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    deactivateEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Identyfikator pracownika (UUID v7). */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pracownik z wyłączonym kontem logowania. */
+            200: {
+                headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    reactivateEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Identyfikator pracownika (UUID v7). */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pracownik z przywróconym kontem logowania. */
+            200: {
+                headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
             422: {
                 headers: {
                     [name: string]: unknown;
