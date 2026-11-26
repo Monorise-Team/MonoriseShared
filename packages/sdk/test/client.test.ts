@@ -375,6 +375,12 @@ describe("createCoreClient", () => {
       acceptedAt: null,
       createdAt: "2026-11-25T10:00:00.000Z",
       updatedAt: "2026-11-25T10:00:00.000Z",
+      delivery: {
+        status: "SENT",
+        attempts: 1,
+        lastAttemptAt: "2026-11-26T10:00:00.000Z",
+        sentAt: "2026-11-26T10:00:01.000Z",
+      },
     };
     const responses = [
       jsonResponse({ data: [invitation], meta: { requestId: "req_1", nextCursor: "next-page" }, error: null }),

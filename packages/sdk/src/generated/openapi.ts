@@ -202,13 +202,13 @@ export interface paths {
         };
         /**
          * Lista zaproszeń pracowników firmy
-         * @description Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`), opcjonalnie filtrowaną statusem. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Zwraca stronicowaną listę zaproszeń pracowników firmy (wygasłe wiersze `PENDING` są raportowane jako `EXPIRED`) wraz ze stanem wysyłki e-maila (`delivery` z najnowszego zadania w kolejce `mail_outbox`, bez wewnętrznych błędów SMTP), opcjonalnie filtrowaną statusem. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         get: operations["listInvitations"];
         put?: never;
         /**
          * Zaproś pracownika e-mailem
-         * @description Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), generuje jednorazowy link aktywacyjny ważny 7 dni i wysyła wiadomość e-mail (ADR-0021). Adres musi należeć do zweryfikowanej domeny firmy. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Tworzy konto `INVITED` (dla nowego pracownika albo wskazanego `employeeId` bez konta), zaproszenie ważne 7 dni oraz zadanie wysyłki wiadomości e-mail w transakcyjnej kolejce `mail_outbox` (`delivery.status = PENDING`, ADR-0021). Wiadomość jest wysyłana po zatwierdzeniu transakcji przez worker z automatycznymi ponowieniami, więc błąd SMTP nie wycofuje zaproszenia; jednorazowy token powstaje dopiero w chwili wysyłki. Adres musi należeć do zweryfikowanej domeny firmy. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         post: operations["createInvitation"];
         delete?: never;
@@ -229,7 +229,7 @@ export interface paths {
         post?: never;
         /**
          * Cofnij oczekujące zaproszenie
-         * @description Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` (konto pozostaje w statusie `INVITED`, a zaproszenie można później wysłać ponownie). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Zmienia status oczekującego zaproszenia z `PENDING` na `REVOKED` i anuluje jego oczekujące zadania wysyłki w kolejce `mail_outbox` (`CANCELLED`). Konto pozostaje w statusie `INVITED`, a zaproszenie można później wysłać ponownie. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         delete: operations["revokeInvitation"];
         options?: never;
@@ -248,7 +248,7 @@ export interface paths {
         put?: never;
         /**
          * Wyślij ponownie zaproszenie pracownika
-         * @description Generuje nowy 7-dniowy link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED` (unieważnia poprzedni link), ustawia status `PENDING` i wysyła nowy e-mail. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Natychmiast unieważnia poprzedni link aktywacyjny dla zaproszenia `PENDING`, `EXPIRED` albo `REVOKED`, ustawia nowy 7-dniowy termin ważności i status `PENDING`, anuluje poprzednie oczekujące zadania w kolejce `mail_outbox` oraz kolejkuje nową wysyłkę wiadomości e-mail (`delivery.status = PENDING`). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         post: operations["resendInvitation"];
         delete?: never;
@@ -986,6 +986,7 @@ export interface components {
             /** Format: uuid */
             accountId: string;
             createdAt: string;
+            delivery: components["schemas"]["InvitationDelivery"];
             email: string;
             /** Format: uuid */
             employeeId: string;
@@ -995,6 +996,12 @@ export interface components {
             invitedByAccountId: string | null;
             status: components["schemas"]["InvitationStatus"];
             updatedAt: string;
+        };
+        InvitationDelivery: {
+            attempts: number;
+            lastAttemptAt: string | null;
+            sentAt: string | null;
+            status: components["schemas"]["MailDeliveryStatus"] | null;
         };
         InvitationList: components["schemas"]["Invitation"][];
         InvitationListResponse: {
@@ -1009,6 +1016,8 @@ export interface components {
         };
         /** @enum {string} */
         InvitationStatus: "PENDING" | "ACCEPTED" | "EXPIRED" | "REVOKED";
+        /** @enum {string} */
+        MailDeliveryStatus: "PENDING" | "SENT" | "FAILED" | "CANCELLED";
         Me: {
             account: {
                 email: string;
@@ -2186,7 +2195,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Utworzone zaproszenie (bez tokenu aktywacyjnego). */
+            /** @description Utworzone zaproszenie ze stanem kolejki wysyłki (bez tokenu aktywacyjnego). */
             201: {
                 headers: {
                     /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
@@ -2352,7 +2361,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego). */
+            /** @description Zaktualizowane zaproszenie z nowym terminem ważności i stanem kolejki (bez tokenu aktywacyjnego). */
             200: {
                 headers: {
                     /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
