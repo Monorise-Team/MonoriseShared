@@ -306,11 +306,95 @@ export interface paths {
         };
         /**
          * Pobierz firmę zalogowanego użytkownika
-         * @description Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania.
+         * @description Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania. Pola `verificationTxtName` i `verificationTxtValue` są zwracane wyłącznie dla domen w statusie `PENDING` lub `FAILED` i tylko Ownerowi albo kontom z uprawnieniem `core.organization.manage` w zakresie całej firmy.
          */
         get: operations["getOrganization"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Zmień dane firmy
+         * @description Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        patch: operations["updateOrganization"];
+        trace?: never;
+    };
+    "/core/v1/organization/domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dodaj domenę e-mail do firmy
+         * @description Dodaje niezweryfikowaną domenę (`PENDING`, weryfikacja rekordem DNS TXT, `isPrimary = false`) do firmy i zwraca dane rekordu TXT do publikacji. Odrzuca darmowe skrzynki pocztowe i ich subdomeny (`422 EMAIL_DOMAIN_NOT_ALLOWED`), domeny zweryfikowane (`VERIFIED`) przez jakąkolwiek firmę lub już dodane w tej firmie (`409 CONFLICT` bez ujawniania właściciela, ADR-0019) oraz przekroczenie limitu 20 domen. Zgodnie z zasadą „wygrywa weryfikacja” wiele firm może zgłosić niezweryfikowane roszczenie do tej samej domeny. Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        post: operations["addOrganizationDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/organization/domains/{domainId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Usuń niegłówną domenę firmy
+         * @description Trwale usuwa niegłówną i nieużywaną domenę firmy (zwalniając ją do ponownego użycia). Zwraca `409 CONFLICT`, gdy domena jest domeną główną, ostatnią zweryfikowaną domeną firmy albo gdy jakikolwiek pracownik (`workEmail`), konto (`normalizedEmail`) lub oczekujące zaproszenie używa adresu w tej domenie (ADR-0019). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        delete: operations["deleteOrganizationDomain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/organization/domains/{domainId}/primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Ustaw główną domenę firmy
+         * @description Ustawia wskazaną zweryfikowaną domenę jako główną domenę firmy (`isPrimary = true`), atomowo zdejmując flagę z poprzedniej głównej domeny i przenosząc firmę z `PENDING_VERIFICATION` do `ACTIVE`, jeśli wciąż oczekiwała na aktywację. Niezweryfikowana domena zwraca `409 CONFLICT`; powtórzenie dla bieżącej głównej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        put: operations["setPrimaryOrganizationDomain"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/organization/domains/{domainId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zweryfikuj domenę firmy rekordem DNS TXT
+         * @description Sprawdza rekord DNS TXT (`_monorise-verification.<domena>`) wskazanej domeny firmy (z limitem czasu 5 s) albo — wyłącznie gdy `NODE_ENV` to `development` lub `test` oraz `CORE_DEV_TRUST_DOMAINS=1` — potwierdza ją z `trustLocally: true`. Po potwierdzeniu usuwa konkurencyjne niezweryfikowane, niegłówne roszczenia innych firm („wygrywa weryfikacja”), a dla głównej domeny przenosi firmę z `PENDING_VERIFICATION` do `ACTIVE`. Brak pasującego rekordu utrwala `lastCheckedAt` i zwraca `422 VALIDATION_FAILED`. Domena zweryfikowana już przez inną firmę albo `REVOKED` zwraca `409 CONFLICT`. Powtórzenie dla już zweryfikowanej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        post: operations["verifyOrganizationDomain"];
         delete?: never;
         options?: never;
         head?: never;
@@ -767,6 +851,9 @@ export interface components {
             firstName?: string;
             lastName?: string;
         };
+        CreateOrganizationDomain: {
+            domain: components["schemas"]["DomainName"];
+        };
         CreateRole: components["schemas"]["CreateRoleFromScratch"] | components["schemas"]["CopyRole"];
         CreateRoleAssignment: {
             /** Format: uuid */
@@ -817,6 +904,7 @@ export interface components {
             error: null;
             meta: components["schemas"]["ApiListMeta"];
         };
+        DomainName: string;
         /** @enum {string} */
         DomainStatus: "PENDING" | "VERIFIED" | "FAILED" | "REVOKED";
         Employee: {
@@ -966,9 +1054,19 @@ export interface components {
         };
         OrganizationDomain: {
             domain: string;
+            /** Format: uuid */
+            id: string;
             isPrimary: boolean;
+            lastCheckedAt: string | null;
             status: components["schemas"]["DomainStatus"];
+            verificationTxtName: string | null;
+            verificationTxtValue: string | null;
             verifiedAt: string | null;
+        };
+        OrganizationDomainResponse: {
+            data: components["schemas"]["OrganizationDomain"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
         };
         OrganizationOwner: {
             /** Format: uuid */
@@ -1199,6 +1297,9 @@ export interface components {
             lastName?: string;
             workEmail?: string | null;
         };
+        UpdateOrganization: {
+            name: string;
+        };
         UpdateRole: {
             description?: string | null;
             name?: string;
@@ -1208,6 +1309,9 @@ export interface components {
             name?: string;
             parentId?: string | null;
             status?: components["schemas"]["UnitStatus"];
+        };
+        VerifyOrganizationDomain: {
+            trustLocally?: boolean;
         };
     };
     responses: never;
@@ -2411,6 +2515,399 @@ export interface operations {
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Pola firmy do aktualizacji. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganization"];
+            };
+        };
+        responses: {
+            /** @description Zaktualizowane dane firmy wraz z listą domen. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    addOrganizationDomain: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Nazwa nowej domeny e-mail firmy. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrganizationDomain"];
+            };
+        };
+        responses: {
+            /** @description Dodana domena firmy z instrukcją rekordu DNS TXT. */
+            201: {
+                headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationDomainResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteOrganizationDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identyfikator domeny firmy (UUID v7). */
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Domena firmy została usunięta. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    setPrimaryOrganizationDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identyfikator domeny firmy (UUID v7). */
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dane firmy ze zaktualizowaną główną domeną. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    verifyOrganizationDomain: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Identyfikator domeny firmy (UUID v7). */
+                domainId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Opcje weryfikacji domeny (lokalne pominięcie DNS przez `trustLocally`). */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyOrganizationDomain"];
+            };
+        };
+        responses: {
+            /** @description Zweryfikowana domena firmy. */
+            200: {
+                headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationDomainResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

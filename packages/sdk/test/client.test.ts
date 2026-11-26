@@ -63,10 +63,14 @@ const ACME_ORGANIZATION: Organization = {
   createdAt: "2026-11-20T09:00:00Z",
   domains: [
     {
+      id: "01a20000-0000-7000-8000-0000000000d1",
       domain: "acme.test",
       status: "VERIFIED",
       isPrimary: true,
       verifiedAt: "2026-11-20T09:15:00Z",
+      lastCheckedAt: "2026-11-20T09:15:00Z",
+      verificationTxtName: null,
+      verificationTxtValue: null,
     },
   ],
 };

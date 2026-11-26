@@ -35,7 +35,7 @@
     },
     {
       "name": "Organization",
-      "description": "Firma zalogowanego użytkownika oraz przekazanie roli Ownera."
+      "description": "Firma zalogowanego użytkownika, jej dane, domeny e-mail oraz przekazanie roli Ownera."
     },
     {
       "name": "Structure",
@@ -1823,7 +1823,7 @@
         ],
         "operationId": "getOrganization",
         "summary": "Pobierz firmę zalogowanego użytkownika",
-        "description": "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania.",
+        "description": "Zwraca firmę wynikającą z tokenu dostępu wraz z listą jej domen posortowaną według daty dodania. Pola `verificationTxtName` i `verificationTxtValue` są zwracane wyłącznie dla domen w statusie `PENDING` lub `FAILED` i tylko Ownerowi albo kontom z uprawnieniem `core.organization.manage` w zakresie całej firmy.",
         "security": [
           {
             "bearerAuth": []
@@ -1842,6 +1842,544 @@
           },
           "401": {
             "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "updateOrganization",
+        "summary": "Zmień dane firmy",
+        "description": "Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Pola firmy do aktualizacji.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganization"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowane dane firmy wraz z listą domen.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/organization/domains": {
+      "post": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "addOrganizationDomain",
+        "summary": "Dodaj domenę e-mail do firmy",
+        "description": "Dodaje niezweryfikowaną domenę (`PENDING`, weryfikacja rekordem DNS TXT, `isPrimary = false`) do firmy i zwraca dane rekordu TXT do publikacji. Odrzuca darmowe skrzynki pocztowe i ich subdomeny (`422 EMAIL_DOMAIN_NOT_ALLOWED`), domeny zweryfikowane (`VERIFIED`) przez jakąkolwiek firmę lub już dodane w tej firmie (`409 CONFLICT` bez ujawniania właściciela, ADR-0019) oraz przekroczenie limitu 20 domen. Zgodnie z zasadą „wygrywa weryfikacja” wiele firm może zgłosić niezweryfikowane roszczenie do tej samej domeny. Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Nazwa nowej domeny e-mail firmy.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationDomain"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Dodana domena firmy z instrukcją rekordu DNS TXT.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationDomainResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/organization/domains/{domainId}": {
+      "delete": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "deleteOrganizationDomain",
+        "summary": "Usuń niegłówną domenę firmy",
+        "description": "Trwale usuwa niegłówną i nieużywaną domenę firmy (zwalniając ją do ponownego użycia). Zwraca `409 CONFLICT`, gdy domena jest domeną główną, ostatnią zweryfikowaną domeną firmy albo gdy jakikolwiek pracownik (`workEmail`), konto (`normalizedEmail`) lub oczekujące zaproszenie używa adresu w tej domenie (ADR-0019). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator domeny firmy (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Domena firmy została usunięta."
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/organization/domains/{domainId}/primary": {
+      "put": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "setPrimaryOrganizationDomain",
+        "summary": "Ustaw główną domenę firmy",
+        "description": "Ustawia wskazaną zweryfikowaną domenę jako główną domenę firmy (`isPrimary = true`), atomowo zdejmując flagę z poprzedniej głównej domeny i przenosząc firmę z `PENDING_VERIFICATION` do `ACTIVE`, jeśli wciąż oczekiwała na aktywację. Niezweryfikowana domena zwraca `409 CONFLICT`; powtórzenie dla bieżącej głównej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator domeny firmy (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Dane firmy ze zaktualizowaną główną domeną.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/organization/domains/{domainId}/verify": {
+      "post": {
+        "tags": [
+          "Organization"
+        ],
+        "operationId": "verifyOrganizationDomain",
+        "summary": "Zweryfikuj domenę firmy rekordem DNS TXT",
+        "description": "Sprawdza rekord DNS TXT (`_monorise-verification.<domena>`) wskazanej domeny firmy (z limitem czasu 5 s) albo — wyłącznie gdy `NODE_ENV` to `development` lub `test` oraz `CORE_DEV_TRUST_DOMAINS=1` — potwierdza ją z `trustLocally: true`. Po potwierdzeniu usuwa konkurencyjne niezweryfikowane, niegłówne roszczenia innych firm („wygrywa weryfikacja”), a dla głównej domeny przenosi firmę z `PENDING_VERIFICATION` do `ACTIVE`. Brak pasującego rekordu utrwala `lastCheckedAt` i zwraca `422 VALIDATION_FAILED`. Domena zweryfikowana już przez inną firmę albo `REVOKED` zwraca `409 CONFLICT`. Powtórzenie dla już zweryfikowanej domeny jest idempotentne (`200`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "domainId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator domeny firmy (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Opcje weryfikacji domeny (lokalne pominięcie DNS przez `trustLocally`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyOrganizationDomain"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zweryfikowana domena firmy.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationDomainResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4736,6 +5274,18 @@
         ],
         "additionalProperties": false
       },
+      "CreateOrganizationDomain": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainName"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "additionalProperties": false
+      },
       "CreateRole": {
         "anyOf": [
           {
@@ -5010,6 +5560,12 @@
           "error"
         ],
         "additionalProperties": false
+      },
+      "DomainName": {
+        "type": "string",
+        "minLength": 4,
+        "maxLength": 253,
+        "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$"
       },
       "DomainStatus": {
         "type": "string",
@@ -5641,6 +6197,11 @@
       "OrganizationDomain": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
           "domain": {
             "type": "string"
           },
@@ -5655,13 +6216,55 @@
               "string",
               "null"
             ]
+          },
+          "lastCheckedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificationTxtName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verificationTxtValue": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
+          "id",
           "domain",
           "status",
           "isPrimary",
-          "verifiedAt"
+          "verifiedAt",
+          "lastCheckedAt",
+          "verificationTxtName",
+          "verificationTxtValue"
+        ],
+        "additionalProperties": false
+      },
+      "OrganizationDomainResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/OrganizationDomain"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
         ],
         "additionalProperties": false
       },
@@ -6716,6 +7319,20 @@
         },
         "additionalProperties": false
       },
+      "UpdateOrganization": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
       "UpdateRole": {
         "type": "object",
         "properties": {
@@ -6770,6 +7387,15 @@
           },
           "status": {
             "$ref": "#/components/schemas/UnitStatus"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VerifyOrganizationDomain": {
+        "type": "object",
+        "properties": {
+          "trustLocally": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
