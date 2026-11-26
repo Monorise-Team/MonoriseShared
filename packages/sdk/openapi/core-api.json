@@ -54,6 +54,10 @@
       "description": "Dostęp firm do produktów (Entitlements) oraz włączanie aplikacji pracownikom (AppAccess, ADR-0035)."
     },
     {
+      "name": "Audit",
+      "description": "Centralny dziennik zdarzeń firmy (ADR-0039)."
+    },
+    {
       "name": "Directory",
       "description": "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy)."
     },
@@ -400,6 +404,173 @@
         }
       }
     },
+    "/core/v1/audit-log": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "operationId": "listAuditLog",
+        "summary": "Dziennik zdarzeń firmy",
+        "description": "Zwraca stronicowaną listę wpisów centralnego dziennika zdarzeń firmy od najnowszych (`createdAt DESC, id DESC`), z oknem retencji 730 dni (ADR-0039, ADR-0041). Wymaga uprawnienia `core.audit.read` w zakresie całej firmy (`ORGANIZATION`) albo roli Ownera. Wrażliwe pola w `metadata` (tokeny, sekrety, hasła, skróty) są usuwane przed zwrotem.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Liczba elementów na stronie (1–100, domyślnie 50).",
+            "schema": {
+              "default": 50,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "actorAccountId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po identyfikatorze konta aktora (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "actorType",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po typie aktora (`ACCOUNT`, `OPERATOR`, `SYSTEM` albo `PRODUCT`).",
+            "schema": {
+              "$ref": "#/components/schemas/AuditActorType"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po nazwie akcji (dokładne dopasowanie, np. `role.assigned`).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "resourceType",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po typie zasobu (np. `role_assignment`, `app_access`, `unit`).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "required": false,
+            "description": "Opcjonalny filtr po identyfikatorze zasobu.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Dolna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt >= from`; nie wcześniej niż 730 dni wstecz).",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Górna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt <= to`).",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona wpisów dziennika zdarzeń firmy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogEntryListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/core/v1/employees": {
       "get": {
         "tags": [
@@ -487,7 +658,7 @@
         ],
         "operationId": "createEmployee",
         "summary": "Dodaj pracownika",
-        "description": "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "description": "Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Opcjonalny służbowy adres e-mail (`workEmail`) jest normalizowany, musi należeć do zweryfikowanej domeny firmy (nigdy darmowej skrzynki) i być unikalny w firmie. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
         "security": [
           {
             "bearerAuth": []
@@ -582,7 +753,118 @@
             }
           },
           "422": {
-            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/employees/{employeeId}": {
+      "patch": {
+        "tags": [
+          "People"
+        ],
+        "operationId": "updateEmployee",
+        "summary": "Zmień dane pracownika",
+        "description": "Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employeeId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator pracownika (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Pola pracownika do aktualizacji.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEmployee"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowany pracownik.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3930,6 +4212,152 @@
           "REVOKED"
         ]
       },
+      "AuditActorType": {
+        "type": "string",
+        "enum": [
+          "ACCOUNT",
+          "OPERATOR",
+          "SYSTEM",
+          "PRODUCT"
+        ]
+      },
+      "AuditLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "actorType": {
+            "$ref": "#/components/schemas/AuditActorType"
+          },
+          "actorAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actorDisplayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "actionLabel": {
+            "type": "string"
+          },
+          "resourceType": {
+            "type": "string"
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          },
+          "ipAddress": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userAgent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supportAccessGrantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actorType",
+          "actorAccountId",
+          "actorDisplayName",
+          "product",
+          "action",
+          "actionLabel",
+          "resourceType",
+          "resourceId",
+          "metadata",
+          "ipAddress",
+          "userAgent",
+          "requestId",
+          "supportAccessGrantId",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "AuditLogEntryList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/AuditLogEntry"
+        }
+      },
+      "AuditLogEntryListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AuditLogEntryList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
       "CopyRole": {
         "type": "object",
         "properties": {
@@ -5978,6 +6406,47 @@
           "DEPARTMENT",
           "TEAM"
         ]
+      },
+      "UpdateEmployee": {
+        "type": "object",
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "lastName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "workEmail": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "format": "email",
+                "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateRole": {
         "type": "object",

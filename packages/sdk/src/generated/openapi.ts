@@ -49,6 +49,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/core/v1/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dziennik zdarzeń firmy
+         * @description Zwraca stronicowaną listę wpisów centralnego dziennika zdarzeń firmy od najnowszych (`createdAt DESC, id DESC`), z oknem retencji 730 dni (ADR-0039, ADR-0041). Wymaga uprawnienia `core.audit.read` w zakresie całej firmy (`ORGANIZATION`) albo roli Ownera. Wrażliwe pola w `metadata` (tokeny, sekrety, hasła, skróty) są usuwane przed zwrotem.
+         */
+        get: operations["listAuditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/core/v1/employees": {
         parameters: {
             query?: never;
@@ -64,13 +84,33 @@ export interface paths {
         put?: never;
         /**
          * Dodaj pracownika
-         * @description Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Tworzy pracownika firmy (może istnieć bez konta, ADR-0031). Opcjonalny służbowy adres e-mail (`workEmail`) jest normalizowany, musi należeć do zweryfikowanej domeny firmy (nigdy darmowej skrzynki) i być unikalny w firmie. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         post: operations["createEmployee"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/core/v1/employees/{employeeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Zmień dane pracownika
+         * @description Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         */
+        patch: operations["updateEmployee"];
         trace?: never;
     };
     "/core/v1/entitlements": {
@@ -633,6 +673,34 @@ export interface components {
         };
         /** @enum {string} */
         AppAccessStatus: "ACTIVE" | "REVOKED";
+        /** @enum {string} */
+        AuditActorType: "ACCOUNT" | "OPERATOR" | "SYSTEM" | "PRODUCT";
+        AuditLogEntry: {
+            action: string;
+            actionLabel: string;
+            actorAccountId: string | null;
+            actorDisplayName: string | null;
+            actorType: components["schemas"]["AuditActorType"];
+            createdAt: string;
+            /** Format: uuid */
+            id: string;
+            ipAddress: string | null;
+            metadata: {
+                [key: string]: unknown;
+            };
+            product: components["schemas"]["ProductKey"] | null;
+            requestId: string | null;
+            resourceId: string;
+            resourceType: string;
+            supportAccessGrantId: string | null;
+            userAgent: string | null;
+        };
+        AuditLogEntryList: components["schemas"]["AuditLogEntry"][];
+        AuditLogEntryListResponse: {
+            data: components["schemas"]["AuditLogEntryList"];
+            error: null;
+            meta: components["schemas"]["ApiListMeta"];
+        };
         CopyRole: {
             /** Format: uuid */
             copyFromRoleId: string;
@@ -1085,6 +1153,12 @@ export interface components {
         UnitStatus: "ACTIVE" | "ARCHIVED";
         /** @enum {string} */
         UnitType: "BRANCH" | "DEPARTMENT" | "TEAM";
+        UpdateEmployee: {
+            firstName?: string;
+            jobTitle?: string | null;
+            lastName?: string;
+            workEmail?: string | null;
+        };
         UpdateRole: {
             description?: string | null;
             name?: string;
@@ -1330,6 +1404,81 @@ export interface operations {
             };
         };
     };
+    listAuditLog: {
+        parameters: {
+            query?: {
+                /** @description Opcjonalny filtr po nazwie akcji (dokładne dopasowanie, np. `role.assigned`). */
+                action?: string;
+                /** @description Opcjonalny filtr po identyfikatorze konta aktora (UUID v7). */
+                actorAccountId?: string;
+                /** @description Opcjonalny filtr po typie aktora (`ACCOUNT`, `OPERATOR`, `SYSTEM` albo `PRODUCT`). */
+                actorType?: components["schemas"]["AuditActorType"];
+                /** @description Nieprzezroczysty kursor następnej strony z pola `meta.nextCursor`. */
+                cursor?: string;
+                /** @description Dolna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt >= from`; nie wcześniej niż 730 dni wstecz). */
+                from?: string;
+                /** @description Liczba elementów na stronie (1–100, domyślnie 50). */
+                limit?: number;
+                /** @description Opcjonalny filtr po identyfikatorze zasobu. */
+                resourceId?: string;
+                /** @description Opcjonalny filtr po typie zasobu (np. `role_assignment`, `app_access`, `unit`). */
+                resourceType?: string;
+                /** @description Górna granica czasu zdarzenia w formacie ISO 8601 ze strefą (włącznie, `createdAt <= to`). */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strona wpisów dziennika zdarzeń firmy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogEntryListResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     listEmployees: {
         parameters: {
             query?: {
@@ -1446,7 +1595,89 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    updateEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identyfikator pracownika (UUID v7). */
+                employeeId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Pola pracownika do aktualizacji. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEmployee"];
+            };
+        };
+        responses: {
+            /** @description Zaktualizowany pracownik. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED, EMAIL_DOMAIN_NOT_ALLOWED). */
             422: {
                 headers: {
                     [name: string]: unknown;
