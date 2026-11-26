@@ -634,7 +634,7 @@ describe("createFakeCore — wstrzykiwanie awarii (failNext, clearFaults) i licz
     const snapshotUrl = `${CORE_API}/core/v1/products/timotime/permission-snapshot?organizationId=${acme.id}&accountId=${anna.accountId}`;
 
     const cases: { status: 500 | 502 | 503 | 504; expectedCode: string }[] = [
-      { status: 500, expectedCode: "INTERNAL" },
+      { status: 500, expectedCode: "INTERNAL_ERROR" },
       { status: 502, expectedCode: "SERVICE_UNAVAILABLE" },
       { status: 503, expectedCode: "SERVICE_UNAVAILABLE" },
       { status: 504, expectedCode: "SERVICE_UNAVAILABLE" },

@@ -58,7 +58,7 @@ export interface FailNextOptions {
 export type FakeCoreCalls = ((operation: FakeCoreOperation) => number) & Record<FakeCoreOperation, number>;
 
 const HTTP_FAULT_DEFAULTS: Record<500 | 502 | 503 | 504, { code: string; message: string }> = {
-  500: { code: "INTERNAL", message: "Wewnętrzny błąd serwera" },
+  500: { code: "INTERNAL_ERROR", message: "Wewnętrzny błąd serwera" },
   502: { code: "SERVICE_UNAVAILABLE", message: "Błąd bramy serwera" },
   503: { code: "SERVICE_UNAVAILABLE", message: "Usługa tymczasowo niedostępna" },
   504: { code: "SERVICE_UNAVAILABLE", message: "Przekroczono czas oczekiwania bramy" },
@@ -1277,7 +1277,7 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
       if (error instanceof FakeCoreApiError) {
         return errorEnvelope(error.status, error.code, error.message, error.details);
       }
-      return errorEnvelope(500, "INTERNAL", "Wewnętrzny błąd serwera");
+      return errorEnvelope(500, "INTERNAL_ERROR", "Wewnętrzny błąd serwera");
     }
   }
 
@@ -1336,7 +1336,7 @@ export async function createFakeCore(options: CreateFakeCoreOptions = {}): Promi
             JSON.stringify({
               data: null,
               meta: { requestId: makeRequestId() },
-              error: { code: "INTERNAL", message: "Wewnętrzny błąd serwera", details: [] },
+              error: { code: "INTERNAL_ERROR", message: "Wewnętrzny błąd serwera", details: [] },
             }),
           );
         }

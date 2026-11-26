@@ -686,6 +686,17 @@ describe("sesja BFF w zaszyfrowanym ciasteczku (ADR-0098)", () => {
     expect(res401.status).toBe(401);
     expect(((await res401.json()) as { meta: { requestId: string } }).meta.requestId).toBe("req_od_klienta");
     expect(res401.headers.getSetCookie()).toEqual([]);
+
+    // 4. Handler rzuca AuthUnavailableError -> 503 JSON z kodem INTERNAL_ERROR.
+    const res503 = await auth.withAuth(withSession(rotatedAfter422), () => {
+      throw new AuthUnavailableError("Core chwilowo nieosiągalny");
+    });
+    expect(res503.status).toBe(503);
+    expect(await res503.json()).toEqual({
+      data: null,
+      meta: { requestId: expect.stringMatching(/^req_/) },
+      error: { code: "INTERNAL_ERROR", message: "Core chwilowo nieosiągalny", details: [] },
+    });
   });
 
   it("wiązanie ciasteczka z aplikacją: ciasteczko z innego clientId, originu lub nazwy przy tym samym sekrecie jest odrzucane", async () => {
