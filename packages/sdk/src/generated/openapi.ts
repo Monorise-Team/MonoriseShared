@@ -762,7 +762,7 @@ export interface components {
         /** @enum {string} */
         EntitlementSuspendedReason: "OVERDUE";
         /** @enum {string} */
-        ErrorCode: "UNAUTHENTICATED" | "PERMISSION_DENIED" | "NOT_FOUND" | "VALIDATION_FAILED" | "RATE_LIMITED" | "CONFLICT" | "EMAIL_DOMAIN_NOT_ALLOWED" | "ORGANIZATION_EXISTS" | "ORGANIZATION_NOT_ACTIVE" | "ACCOUNT_DEACTIVATED" | "INTERNAL";
+        ErrorCode: "UNAUTHENTICATED" | "PERMISSION_DENIED" | "NOT_FOUND" | "VALIDATION_FAILED" | "RATE_LIMITED" | "CONFLICT" | "EMAIL_DOMAIN_NOT_ALLOWED" | "ORGANIZATION_EXISTS" | "ORGANIZATION_NOT_ACTIVE" | "ACCOUNT_DEACTIVATED" | "INTERNAL_ERROR";
         GrantScope: {
             /** @constant */
             type: "ORGANIZATION";
@@ -1151,7 +1151,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1165,7 +1165,10 @@ export interface operations {
     grantAppAccess: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1179,10 +1182,21 @@ export interface operations {
             /** @description Utworzony wpis dostępu konta do aplikacji. */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["AppAccessResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -1230,7 +1244,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1305,7 +1319,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1357,7 +1371,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1371,7 +1385,10 @@ export interface operations {
     createEmployee: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1385,10 +1402,21 @@ export interface operations {
             /** @description Utworzony pracownik. */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -1409,6 +1437,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
             422: {
                 headers: {
@@ -1418,7 +1455,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1472,7 +1509,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1501,7 +1538,7 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1564,7 +1601,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1578,7 +1615,10 @@ export interface operations {
     createInvitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1592,10 +1632,21 @@ export interface operations {
             /** @description Utworzone zaproszenie (bez tokenu aktywacyjnego). */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -1643,7 +1694,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1718,7 +1769,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1732,7 +1783,10 @@ export interface operations {
     resendInvitation: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Identyfikator zaproszenia pracownika (UUID v7). */
                 invitationId: string;
@@ -1744,10 +1798,21 @@ export interface operations {
             /** @description Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego). */
             200: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -1795,7 +1860,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1833,7 +1898,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1862,7 +1927,7 @@ export interface operations {
                     "application/json": components["schemas"]["OpenApiDocument"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1900,7 +1965,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1979,7 +2044,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2035,7 +2100,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2112,7 +2177,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2189,7 +2254,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2262,7 +2327,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2335,7 +2400,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2408,7 +2473,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2481,7 +2546,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2537,7 +2602,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2551,7 +2616,10 @@ export interface operations {
     createRoleAssignment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2565,10 +2633,21 @@ export interface operations {
             /** @description Utworzone przypisanie roli. */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["RoleAssignmentResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -2616,7 +2695,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2682,7 +2761,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2740,7 +2819,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2754,7 +2833,10 @@ export interface operations {
     createRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2768,10 +2850,21 @@ export interface operations {
             /** @description Utworzona rola firmy. */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -2819,7 +2912,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2878,7 +2971,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -2953,7 +3046,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3035,7 +3128,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3089,7 +3182,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3103,7 +3196,10 @@ export interface operations {
     createUnit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -3117,10 +3213,21 @@ export interface operations {
             /** @description Utworzona jednostka organizacyjna. */
             201: {
                 headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["UnitResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
@@ -3168,7 +3275,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3250,7 +3357,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3314,7 +3421,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3398,7 +3505,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -3466,7 +3573,7 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
-            /** @description Wewnętrzny błąd serwera (INTERNAL). */
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
             500: {
                 headers: {
                     [name: string]: unknown;

@@ -163,7 +163,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -186,6 +186,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Identyfikator konta i klucz produktu.",
@@ -200,10 +214,32 @@
         "responses": {
           "201": {
             "description": "Utworzony wpis dostępu konta do aplikacji.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AppAccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -259,7 +295,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -352,7 +388,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -434,7 +470,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -457,6 +493,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Dane nowego pracownika.",
@@ -471,10 +521,32 @@
         "responses": {
           "201": {
             "description": "Utworzony pracownik.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -499,6 +571,16 @@
               }
             }
           },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
             "content": {
@@ -510,7 +592,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -601,7 +683,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -633,7 +715,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -734,7 +816,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -757,6 +839,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Adres e-mail oraz imię i nazwisko albo identyfikator istniejącego pracownika bez konta.",
@@ -771,10 +867,32 @@
         "responses": {
           "201": {
             "description": "Utworzone zaproszenie (bez tokenu aktywacyjnego).",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InvitationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -830,7 +948,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -923,7 +1041,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -959,15 +1077,49 @@
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
           }
         ],
         "responses": {
           "200": {
             "description": "Zaktualizowane zaproszenie z nowym terminem ważności (bez tokenu aktywacyjnego).",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InvitationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -1023,7 +1175,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1070,7 +1222,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1102,7 +1254,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1149,7 +1301,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1247,7 +1399,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1348,7 +1500,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1487,7 +1639,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1626,7 +1778,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1738,7 +1890,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1850,7 +2002,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1951,7 +2103,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2052,7 +2204,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2156,7 +2308,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2179,6 +2331,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Dane nowego przypisania roli.",
@@ -2193,10 +2359,32 @@
         "responses": {
           "201": {
             "description": "Utworzone przypisanie roli.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RoleAssignmentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -2252,7 +2440,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2335,7 +2523,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2446,7 +2634,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2469,6 +2657,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Dane nowej roli firmy albo identyfikator kopiowanej roli.",
@@ -2483,10 +2685,32 @@
         "responses": {
           "201": {
             "description": "Utworzona rola firmy.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -2542,7 +2766,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2622,7 +2846,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2731,7 +2955,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2822,7 +3046,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2913,7 +3137,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2936,6 +3160,20 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "Dane nowej jednostki organizacyjnej.",
@@ -2950,10 +3188,32 @@
         "responses": {
           "201": {
             "description": "Utworzona jednostka organizacyjna.",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UnitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
                 }
               }
             }
@@ -3009,7 +3269,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3120,7 +3380,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3223,7 +3483,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3345,7 +3605,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3437,7 +3697,7 @@
             }
           },
           "500": {
-            "description": "Wewnętrzny błąd serwera (INTERNAL).",
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4319,7 +4579,7 @@
           "ORGANIZATION_EXISTS",
           "ORGANIZATION_NOT_ACTIVE",
           "ACCOUNT_DEACTIVATED",
-          "INTERNAL"
+          "INTERNAL_ERROR"
         ]
       },
       "GrantScope": {
