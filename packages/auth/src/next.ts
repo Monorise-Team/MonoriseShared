@@ -157,7 +157,7 @@ export interface WithAuthOptions {
   /**
    * Zamienia błąd rzucony przez `authenticate()` albo przez `handler` na odpowiedź HTTP
    * (np. własny format błędów). Do zwróconej odpowiedzi również trafią odświeżone ciasteczka sesji.
-   * Domyślnie `AuthError` (401/403) i `AuthUnavailableError` (503, kod `INTERNAL`) są zamieniane na kopertę JSON
+   * Domyślnie `AuthError` (401/403) i `AuthUnavailableError` (503, kod `INTERNAL_ERROR`) są zamieniane na kopertę JSON
    * `{ data: null, meta: { requestId }, error: { code, message, details: [] } }`, a pozostałe błędy są rzucane dalej.
    */
   onError?: (error: unknown, request: Request) => Response | Promise<Response>;
@@ -1214,7 +1214,10 @@ export function createWebAuth(options: WebAuthOptions): WebAuth {
         return applySessionCookies(errorEnvelope(request, error.statusCode, error.code, error.message), authenticated);
       }
       if (error instanceof AuthUnavailableError) {
-        return applySessionCookies(errorEnvelope(request, error.statusCode, "INTERNAL", error.message), authenticated);
+        return applySessionCookies(
+          errorEnvelope(request, error.statusCode, "INTERNAL_ERROR", error.message),
+          authenticated,
+        );
       }
       throw error;
     }
