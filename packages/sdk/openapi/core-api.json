@@ -59,7 +59,7 @@
     },
     {
       "name": "Directory",
-      "description": "Katalog pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy)."
+      "description": "Katalog danych firmy, pracowników i członkostw w jednostkach dla serwerów produktów (token maszynowy)."
     },
     {
       "name": "Events",
@@ -786,7 +786,7 @@
         ],
         "operationId": "updateEmployee",
         "summary": "Zmień dane pracownika",
-        "description": "Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
+        "description": "Aktualizuje imię, nazwisko, stanowisko, harmonogram pracy (`workSchedule`: minuty pracy w dni tygodnia ISO `\"1\"`..`\"7\"`, wartości całkowite `0–1440`, albo `null` do wyczyszczenia) i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.",
         "security": [
           {
             "bearerAuth": []
@@ -1748,7 +1748,7 @@
         ],
         "operationId": "getMe",
         "summary": "Pobierz dane zalogowanego konta, pracownika i firmy",
-        "description": "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.",
+        "description": "Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika (z `workSchedule` oraz wyliczonym `effectiveWorkSchedule`) oraz skrócone dane firmy (`timeZone`, `defaultWorkSchedule`).",
         "security": [
           {
             "bearerAuth": []
@@ -2116,7 +2116,7 @@
         ],
         "operationId": "updateOrganization",
         "summary": "Zmień dane firmy",
-        "description": "Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
+        "description": "Aktualizuje edytowalne dane firmy (nazwę, strefę czasową IANA, np. `Europe/Warsaw`, i/lub domyślny harmonogram pracy `defaultWorkSchedule`: minuty w dni tygodnia ISO `\"1\"`..`\"7\"`, wartości całkowite `0–1440`, albo `null`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.",
         "security": [
           {
             "bearerAuth": []
@@ -3002,7 +3002,7 @@
         ],
         "operationId": "listProductDirectoryEmployees",
         "summary": "Lista podstawowych danych pracowników dla serwera produktu",
-        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne (bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne, surowy harmonogram pracy (`workSchedule`) oraz efektywny harmonogram (`effectiveWorkSchedule`, uwzględniający domyślny harmonogram firmy; bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).",
         "security": [
           {
             "productOAuth": [
@@ -3134,6 +3134,107 @@
         }
       }
     },
+    "/core/v1/products/{productKey}/directory/organization": {
+      "get": {
+        "tags": [
+          "Directory"
+        ],
+        "operationId": "getProductDirectoryOrganization",
+        "summary": "Podstawowe dane firmy (strefa czasowa i domyślny harmonogram) dla serwera produktu",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, `defaultWorkSchedule`, bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.",
+        "security": [
+          {
+            "productOAuth": [
+              "core:directory.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "productKey",
+            "in": "path",
+            "required": true,
+            "description": "Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`).",
+            "schema": {
+              "$ref": "#/components/schemas/ProductKey"
+            }
+          },
+          {
+            "name": "organizationId",
+            "in": "query",
+            "required": true,
+            "description": "Identyfikator firmy (UUID v7), której profil jest pobierany.",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Podstawowe dane firmy wraz ze strefą czasową IANA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryOrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/core/v1/products/{productKey}/directory/unit-members": {
       "get": {
         "tags": [
@@ -3141,7 +3242,7 @@
         ],
         "operationId": "listProductDirectoryUnitMembers",
         "summary": "Lista członkostw pracowników w jednostkach dla serwera produktu",
-        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca członkostwa w jednostkach wraz z surowym harmonogramem pracy (`workSchedule`) oraz efektywnym harmonogramem (`effectiveWorkSchedule`, uwzględniającym domyślny harmonogram firmy). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.",
         "security": [
           {
             "productOAuth": [
@@ -5900,6 +6001,26 @@
           },
           "status": {
             "$ref": "#/components/schemas/EmployeeStatus"
+          },
+          "workSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -5907,7 +6028,9 @@
           "accountId",
           "firstName",
           "lastName",
-          "status"
+          "status",
+          "workSchedule",
+          "effectiveWorkSchedule"
         ],
         "additionalProperties": false
       },
@@ -5925,6 +6048,63 @@
           },
           "meta": {
             "$ref": "#/components/schemas/ApiListMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/OrganizationStatus"
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/TimeZone"
+          },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "timeZone",
+          "defaultWorkSchedule"
+        ],
+        "additionalProperties": false
+      },
+      "DirectoryOrganizationResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DirectoryOrganization"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
           },
           "error": {
             "type": "null"
@@ -5964,13 +6144,35 @@
           },
           "role": {
             "$ref": "#/components/schemas/UnitMembershipRole"
+          },
+          "workSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "unitId",
           "employeeId",
           "accountId",
-          "role"
+          "role",
+          "workSchedule",
+          "effectiveWorkSchedule"
         ],
         "additionalProperties": false
       },
@@ -6063,6 +6265,16 @@
               "null"
             ]
           },
+          "workSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "$ref": "#/components/schemas/EmployeeStatus"
           }
@@ -6075,6 +6287,7 @@
           "lastName",
           "workEmail",
           "jobTitle",
+          "workSchedule",
           "status"
         ],
         "additionalProperties": false
@@ -6563,7 +6776,90 @@
             "additionalProperties": false
           },
           "employee": {
-            "$ref": "#/components/schemas/Employee"
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "accountId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "accountStatus": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AccountStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "firstName": {
+                "type": "string"
+              },
+              "lastName": {
+                "type": "string"
+              },
+              "workEmail": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "jobTitle": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "workSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "$ref": "#/components/schemas/EmployeeStatus"
+              },
+              "effectiveWorkSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "accountId",
+              "accountStatus",
+              "firstName",
+              "lastName",
+              "workEmail",
+              "jobTitle",
+              "workSchedule",
+              "status",
+              "effectiveWorkSchedule"
+            ],
+            "additionalProperties": false
           },
           "organization": {
             "type": "object",
@@ -6578,12 +6874,27 @@
               },
               "status": {
                 "$ref": "#/components/schemas/OrganizationStatus"
+              },
+              "timeZone": {
+                "$ref": "#/components/schemas/TimeZone"
+              },
+              "defaultWorkSchedule": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkSchedule"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": [
               "id",
               "name",
-              "status"
+              "status",
+              "timeZone",
+              "defaultWorkSchedule"
             ],
             "additionalProperties": false
           }
@@ -6837,6 +7148,19 @@
           "status": {
             "$ref": "#/components/schemas/OrganizationStatus"
           },
+          "timeZone": {
+            "$ref": "#/components/schemas/TimeZone"
+          },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "domains": {
             "type": "array",
             "items": {
@@ -6851,6 +7175,8 @@
           "id",
           "name",
           "status",
+          "timeZone",
+          "defaultWorkSchedule",
           "domains",
           "createdAt"
         ],
@@ -7733,6 +8059,11 @@
         ],
         "additionalProperties": false
       },
+      "TimeZone": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
       "TransferOrganizationOwner": {
         "type": "object",
         "properties": {
@@ -8014,6 +8345,16 @@
                 "type": "null"
               }
             ]
+          },
+          "workSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -8037,11 +8378,21 @@
             "type": "string",
             "minLength": 2,
             "maxLength": 120
+          },
+          "timeZone": {
+            "$ref": "#/components/schemas/TimeZone"
+          },
+          "defaultWorkSchedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "name"
-        ],
         "additionalProperties": false
       },
       "UpdateRole": {
@@ -8107,6 +8458,47 @@
         "properties": {
           "trustLocally": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkSchedule": {
+        "type": "object",
+        "properties": {
+          "1": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "2": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "3": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "4": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "5": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "6": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
+          },
+          "7": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1440
           }
         },
         "additionalProperties": false
