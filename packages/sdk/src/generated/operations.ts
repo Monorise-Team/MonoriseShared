@@ -201,6 +201,18 @@ export const CORE_OPERATIONS = {
     noContent: false,
     paginated: false,
   },
+  getProductDirectoryOrganization: {
+    operationId: "getProductDirectoryOrganization",
+    method: "GET",
+    path: "/core/v1/products/{productKey}/directory/organization",
+    pathParams: ["productKey"],
+    queryParams: ["organizationId"],
+    hasBody: false,
+    requiresAuth: true,
+    enveloped: true,
+    noContent: false,
+    paginated: false,
+  },
   getProductPermissionSnapshot: {
     operationId: "getProductPermissionSnapshot",
     method: "GET",

@@ -108,7 +108,7 @@ export interface paths {
         head?: never;
         /**
          * Zmień dane pracownika
-         * @description Aktualizuje imię, nazwisko, stanowisko i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Aktualizuje imię, nazwisko, stanowisko, harmonogram pracy (`workSchedule`: minuty pracy w dni tygodnia ISO `"1"`..`"7"`, wartości całkowite `0–1440`, albo `null` do wyczyszczenia) i — wyłącznie dla pracownika bez konta logowania — służbowy adres e-mail (`workEmail`, w zweryfikowanej domenie firmy i unikalny w firmie). Zmiana imienia lub nazwiska pracownika z kontem aktualizuje również nazwę konta logowania; zmiana albo wyczyszczenie `workEmail` dla pracownika z kontem oraz edycja pracownika w statusie `ANONYMIZED` zwracają `409 CONFLICT`. Wymaga uprawnienia `core.employees.manage` w zakresie całej firmy albo roli Ownera.
          */
         patch: operations["updateEmployee"];
         trace?: never;
@@ -266,7 +266,7 @@ export interface paths {
         };
         /**
          * Pobierz dane zalogowanego konta, pracownika i firmy
-         * @description Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika oraz skrócone dane firmy.
+         * @description Zwraca konto (wraz z informacją `isOwner`), przypisanego pracownika (z `workSchedule` oraz wyliczonym `effectiveWorkSchedule`) oraz skrócone dane firmy (`timeZone`, `defaultWorkSchedule`).
          */
         get: operations["getMe"];
         put?: never;
@@ -380,7 +380,7 @@ export interface paths {
         head?: never;
         /**
          * Zmień dane firmy
-         * @description Aktualizuje edytowalne dane firmy (nazwę). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
+         * @description Aktualizuje edytowalne dane firmy (nazwę, strefę czasową IANA, np. `Europe/Warsaw`, i/lub domyślny harmonogram pracy `defaultWorkSchedule`: minuty w dni tygodnia ISO `"1"`..`"7"`, wartości całkowite `0–1440`, albo `null`). Wymaga uprawnienia `core.organization.manage` w zakresie całej firmy albo roli Ownera.
          */
         patch: operations["updateOrganization"];
         trace?: never;
@@ -534,9 +534,29 @@ export interface paths {
         };
         /**
          * Lista podstawowych danych pracowników dla serwera produktu
-         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne (bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).
+         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca wyłącznie minimalne pola identyfikacyjne, surowy harmonogram pracy (`workSchedule`) oraz efektywny harmonogram (`effectiveWorkSchedule`, uwzględniający domyślny harmonogram firmy; bez służbowego e-maila i stanowiska). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`).
          */
         get: operations["listProductDirectoryEmployees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/products/{productKey}/directory/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Podstawowe dane firmy (strefa czasowa i domyślny harmonogram) dla serwera produktu
+         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca minimalny profil firmy (`id`, `name`, `status`, `timeZone`, `defaultWorkSchedule`, bez danych domenowych). Wymaga zgodności klienta produktu oraz aktywnego dostępu firmy (`Entitlement`). Działa pod RLS.
+         */
+        get: operations["getProductDirectoryOrganization"];
         put?: never;
         post?: never;
         delete?: never;
@@ -554,7 +574,7 @@ export interface paths {
         };
         /**
          * Lista członkostw pracowników w jednostkach dla serwera produktu
-         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.
+         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:directory.read`). Zwraca członkostwa w jednostkach wraz z surowym harmonogramem pracy (`workSchedule`) oraz efektywnym harmonogramem (`effectiveWorkSchedule`, uwzględniającym domyślny harmonogram firmy). Wymaga zgodności klienta z `products.registrationClientId` oraz aktywnego dostępu firmy (`Entitlement`) do wskazanego produktu. Działa w kontekście RLS wskazanej firmy.
          */
         get: operations["listProductDirectoryUnitMembers"];
         put?: never;
@@ -970,11 +990,13 @@ export interface components {
         };
         DirectoryEmployee: {
             accountId: string | null;
+            effectiveWorkSchedule: components["schemas"]["WorkSchedule"] | null;
             firstName: string;
             /** Format: uuid */
             id: string;
             lastName: string;
             status: components["schemas"]["EmployeeStatus"];
+            workSchedule: components["schemas"]["WorkSchedule"] | null;
         };
         DirectoryEmployeeList: components["schemas"]["DirectoryEmployee"][];
         DirectoryEmployeeListResponse: {
@@ -982,13 +1004,28 @@ export interface components {
             error: null;
             meta: components["schemas"]["ApiListMeta"];
         };
+        DirectoryOrganization: {
+            defaultWorkSchedule: components["schemas"]["WorkSchedule"] | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            status: components["schemas"]["OrganizationStatus"];
+            timeZone: components["schemas"]["TimeZone"];
+        };
+        DirectoryOrganizationResponse: {
+            data: components["schemas"]["DirectoryOrganization"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
         DirectoryUnitMember: {
             accountId: string | null;
+            effectiveWorkSchedule: components["schemas"]["WorkSchedule"] | null;
             /** Format: uuid */
             employeeId: string;
             role: components["schemas"]["UnitMembershipRole"];
             /** Format: uuid */
             unitId: string;
+            workSchedule: components["schemas"]["WorkSchedule"] | null;
         };
         DirectoryUnitMemberList: components["schemas"]["DirectoryUnitMember"][];
         DirectoryUnitMemberListResponse: {
@@ -1009,6 +1046,7 @@ export interface components {
             lastName: string;
             status: components["schemas"]["EmployeeStatus"];
             workEmail: string | null;
+            workSchedule: components["schemas"]["WorkSchedule"] | null;
         };
         EmployeeList: components["schemas"]["Employee"][];
         EmployeeListResponse: {
@@ -1118,12 +1156,26 @@ export interface components {
                 isOwner: boolean;
                 status: components["schemas"]["AccountStatus"];
             };
-            employee: components["schemas"]["Employee"];
+            employee: {
+                accountId: string | null;
+                accountStatus: components["schemas"]["AccountStatus"] | null;
+                effectiveWorkSchedule: components["schemas"]["WorkSchedule"] | null;
+                firstName: string;
+                /** Format: uuid */
+                id: string;
+                jobTitle: string | null;
+                lastName: string;
+                status: components["schemas"]["EmployeeStatus"];
+                workEmail: string | null;
+                workSchedule: components["schemas"]["WorkSchedule"] | null;
+            };
             organization: {
+                defaultWorkSchedule: components["schemas"]["WorkSchedule"] | null;
                 /** Format: uuid */
                 id: string;
                 name: string;
                 status: components["schemas"]["OrganizationStatus"];
+                timeZone: components["schemas"]["TimeZone"];
             };
         };
         MeResponse: {
@@ -1186,11 +1238,13 @@ export interface components {
         };
         Organization: {
             createdAt: string;
+            defaultWorkSchedule: components["schemas"]["WorkSchedule"] | null;
             domains: components["schemas"]["OrganizationDomain"][];
             /** Format: uuid */
             id: string;
             name: string;
             status: components["schemas"]["OrganizationStatus"];
+            timeZone: components["schemas"]["TimeZone"];
         };
         OrganizationDomain: {
             domain: string;
@@ -1380,6 +1434,7 @@ export interface components {
             id: string;
             parentId: string | null;
         };
+        TimeZone: string;
         TransferOrganizationOwner: {
             /** Format: uuid */
             accountId: string;
@@ -1446,12 +1501,15 @@ export interface components {
             jobTitle?: string | null;
             lastName?: string;
             workEmail?: string | null;
+            workSchedule?: components["schemas"]["WorkSchedule"] | null;
         };
         UpdateNotificationPreference: {
             enabled: boolean;
         };
         UpdateOrganization: {
-            name: string;
+            defaultWorkSchedule?: components["schemas"]["WorkSchedule"] | null;
+            name?: string;
+            timeZone?: components["schemas"]["TimeZone"];
         };
         UpdateRole: {
             description?: string | null;
@@ -1465,6 +1523,15 @@ export interface components {
         };
         VerifyOrganizationDomain: {
             trustLocally?: boolean;
+        };
+        WorkSchedule: {
+            1?: number;
+            2?: number;
+            3?: number;
+            4?: number;
+            5?: number;
+            6?: number;
+            7?: number;
         };
     };
     responses: never;
@@ -3515,6 +3582,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectoryEmployeeListResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getProductDirectoryOrganization: {
+        parameters: {
+            query: {
+                /** @description Identyfikator firmy (UUID v7), której profil jest pobierany. */
+                organizationId: string;
+            };
+            header?: never;
+            path: {
+                /** @description Klucz produktu zgodny z prefiksem kluczy uprawnień (np. `timotime`). */
+                productKey: components["schemas"]["ProductKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Podstawowe dane firmy wraz ze strefą czasową IANA. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryOrganizationResponse"];
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED). */

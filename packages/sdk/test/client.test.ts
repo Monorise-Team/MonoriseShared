@@ -48,11 +48,15 @@ const ANNA_ME: Me = {
     workEmail: "anna@acme.test",
     jobTitle: "Product Manager",
     status: "ACTIVE",
+    workSchedule: null,
+    effectiveWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
   },
   organization: {
     id: ORG_ID,
     name: "Acme",
     status: "ACTIVE",
+    timeZone: "Europe/Warsaw",
+    defaultWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
   },
 };
 
@@ -60,6 +64,8 @@ const ACME_ORGANIZATION: Organization = {
   id: ORG_ID,
   name: "Acme",
   status: "ACTIVE",
+  timeZone: "Europe/Warsaw",
+  defaultWorkSchedule: { "1": 480, "2": 480, "3": 480, "4": 480, "5": 480 },
   createdAt: "2026-11-20T09:00:00Z",
   domains: [
     {
