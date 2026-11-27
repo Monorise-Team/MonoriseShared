@@ -1132,7 +1132,7 @@ export interface components {
             meta: components["schemas"]["ApiMeta"];
         };
         /** @enum {string} */
-        NotificationCategoryKey: "security" | "account" | "timotime.reminders" | "kivotasks.assignments";
+        NotificationCategoryKey: "security" | "account" | "timotime.reminders" | "kivotasks.assignments" | "avenmail.alerts";
         /** @enum {string} */
         NotificationMailChannel: "login" | "notifications";
         NotificationPreference: {
@@ -2662,7 +2662,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`). */
+                /** @description Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`, `avenmail.alerts`). */
                 category: components["schemas"]["NotificationCategoryKey"];
             };
             cookie?: never;
