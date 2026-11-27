@@ -363,6 +363,45 @@ describe("createCoreClient", () => {
     expectTypeOf(page.items[0]!.sequence).toEqualTypeOf<string>();
   });
 
+  it("requests a notification with a machine token and an Idempotency-Key, and reads Anna's preferences", async () => {
+    const fetchMock = vi.fn<FetchFunction>(async (_input, init) =>
+      String(init?.method) === "POST"
+        ? jsonResponse(
+            {
+              data: { id: "01936f4e-5000-7000-8000-000000000009", status: "QUEUED", skipReason: null },
+              meta: { requestId: "req_n" },
+              error: null,
+            },
+            202,
+          )
+        : jsonResponse({ data: { preferences: [] }, meta: { requestId: "req_p" }, error: null }),
+    );
+    const core = createCoreClient({
+      baseUrl: "http://localhost:3200",
+      getAccessToken: () => MACHINE_TOKEN,
+      fetch: fetchMock,
+    });
+
+    // KivoTasks zleca e-mail o przypisaniu zadania MAG-3 do Jana
+    const queued = await core.sendNotification({
+      path: { organizationId: ORG_ID },
+      body: {
+        recipientAccountId: JAN_ACCOUNT_ID,
+        category: "kivotasks.assignments",
+        title: "Przypisano Ci zadanie MAG-3",
+        body: "Anna przypisała Ci zadanie „Przegląd wózków widłowych”.",
+        actionUrl: "https://kivotasks.monorise.studio/issue/MAG-3",
+      },
+    });
+    expect(queued.status).toBe("QUEUED");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`http://localhost:3200/core/v1/organizations/${ORG_ID}/notifications`);
+    expect(new Headers(init?.headers).get("idempotency-key")).toBeTruthy();
+
+    await core.listMyNotificationPreferences();
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:3200/core/v1/me/notification-preferences");
+  });
+
   it("lists, creates, resends and revokes employee invitations", async () => {
     const invitation: Invitation = {
       id: "01936f4e-4000-7000-8000-000000000001",

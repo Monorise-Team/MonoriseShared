@@ -277,6 +277,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/core/v1/me/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lista ustawień powiadomień zalogowanego użytkownika
+         * @description Zwraca kategorie powiadomień kanału logowania (zawsze włączone, bez możliwości wyłączenia) oraz kategorie produktów, do których bieżąca firma ma aktywny `Entitlement`, wraz z bieżącym stanem `enabled` dla konta (brak zapisu oznacza `enabled = true`).
+         */
+        get: operations["listMyNotificationPreferences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/me/notification-preferences/{category}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Zmień ustawienie kategorii powiadomień e-mail
+         * @description Włącza albo wyłącza opcjonalną kategorię powiadomień e-mail dla zalogowanego konta w bieżącej firmie i zapisuje wpis `notification.preference_changed` w dzienniku zdarzeń. Zwraca `422 VALIDATION_FAILED` dla nieznanych kategorii oraz kategorii obowiązkowych (np. `security`, `account`).
+         */
+        put: operations["updateMyNotificationPreference"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/notifications/unsubscribe/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Strona potwierdzenia wypisania z kategorii powiadomień
+         * @description Publiczna strona HTML otwierana po kliknięciu linku wypisania w stopce wiadomości e-mail. Żądanie `GET` nigdy nie zmienia ustawień (chroni przed automatycznym otwieraniem linków przez skanery poczty): wyświetla nazwę kategorii i firmy oraz formularz z przyciskiem wysyłającym `POST` na ten sam adres. Nieprawidłowy, zmanipulowany albo nieaktywny link zwraca neutralną stronę HTML ze statusem `404`.
+         */
+        get: operations["getUnsubscribeNotificationPage"];
+        put?: never;
+        /**
+         * Jednoklikowe wypisanie z kategorii powiadomień (RFC 8058)
+         * @description Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; przyjmuje `application/x-www-form-urlencoded`, `multipart/form-data` lub puste żądanie). Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed` (tylko przy faktycznej zmianie wartości). Gdy żądanie akceptuje `text/html` (formularz ze strony potwierdzenia), zwraca stronę HTML z potwierdzeniem albo neutralny komunikat `404`; klienci jednoklikowi dostają JSON. Nieprawidłowy, zmanipulowany albo nieaktywny token zwraca `404 NOT_FOUND`.
+         */
+        post: operations["unsubscribeNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/core/v1/openapi.json": {
         parameters: {
             query?: never;
@@ -415,6 +479,26 @@ export interface paths {
          */
         put: operations["transferOrganizationOwner"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/core/v1/organizations/{organizationId}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Zleć wysyłkę powiadomienia e-mail przez produkt
+         * @description Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:notifications.send`, obsługuje nagłówek `Idempotency-Key`). Weryfikuje własność kategorii przez produkt wywołującego klienta (`403`), aktywny `Entitlement` firmy (`403`) oraz origin `actionUrl` zgodny z `uri` klienta OAuth (`422`). Gdy odbiorca nie jest aktywnym pracownikiem firmy z aktywnym kontem i dostępem do produktu, zwraca `202` ze statusem `SKIPPED` i powodem `NO_ACCESS` (bez zdradzania szczegółów); wyłączona kategoria daje `202` `SKIPPED` / `PREFERENCE_OFF`. W pozostałych przypadkach zapisuje powiadomienie `QUEUED` wraz z zadaniem w `mail_outbox` w jednej transakcji i zwraca `202`.
+         */
+        post: operations["sendNotification"];
         delete?: never;
         options?: never;
         head?: never;
@@ -851,6 +935,14 @@ export interface components {
             firstName?: string;
             lastName?: string;
         };
+        CreateNotification: {
+            actionUrl?: string | null;
+            body: string;
+            category: components["schemas"]["NotificationCategoryKey"];
+            /** Format: uuid */
+            recipientAccountId: string;
+            title: string;
+        };
         CreateOrganizationDomain: {
             domain: components["schemas"]["DomainName"];
         };
@@ -1039,6 +1131,45 @@ export interface components {
             error: null;
             meta: components["schemas"]["ApiMeta"];
         };
+        /** @enum {string} */
+        NotificationCategoryKey: "security" | "account" | "timotime.reminders" | "kivotasks.assignments";
+        /** @enum {string} */
+        NotificationMailChannel: "login" | "notifications";
+        NotificationPreference: {
+            category: components["schemas"]["NotificationCategoryKey"];
+            channel: components["schemas"]["NotificationMailChannel"];
+            description: string;
+            enabled: boolean;
+            name: string;
+            optional: boolean;
+            product: components["schemas"]["ProductKey"] | null;
+        };
+        NotificationPreferenceList: components["schemas"]["NotificationPreference"][];
+        NotificationPreferenceListResponse: {
+            data: components["schemas"]["NotificationPreferenceList"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
+        NotificationPreferenceResponse: {
+            data: components["schemas"]["NotificationPreference"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
+        NotificationResult: {
+            /** Format: uuid */
+            id: string;
+            skipReason: components["schemas"]["NotificationSkipReason"] | null;
+            status: components["schemas"]["NotificationStatus"];
+        };
+        NotificationResultResponse: {
+            data: components["schemas"]["NotificationResult"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
+        /** @enum {string} */
+        NotificationSkipReason: "PREFERENCE_OFF" | "NO_ACCESS";
+        /** @enum {string} */
+        NotificationStatus: "QUEUED" | "SENT" | "SKIPPED" | "FAILED";
         OpenApiDocument: {
             info: {
                 title: string;
@@ -1300,11 +1431,24 @@ export interface components {
         UnitStatus: "ACTIVE" | "ARCHIVED";
         /** @enum {string} */
         UnitType: "BRANCH" | "DEPARTMENT" | "TEAM";
+        UnsubscribeNotificationResponse: {
+            data: components["schemas"]["UnsubscribeNotificationResult"];
+            error: null;
+            meta: components["schemas"]["ApiMeta"];
+        };
+        UnsubscribeNotificationResult: {
+            category: components["schemas"]["NotificationCategoryKey"];
+            /** @constant */
+            enabled: false;
+        };
         UpdateEmployee: {
             firstName?: string;
             jobTitle?: string | null;
             lastName?: string;
             workEmail?: string | null;
+        };
+        UpdateNotificationPreference: {
+            enabled: boolean;
         };
         UpdateOrganization: {
             name: string;
@@ -2475,6 +2619,183 @@ export interface operations {
             };
         };
     };
+    listMyNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lista kategorii powiadomień wraz z ustawieniami konta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceListResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    updateMyNotificationPreference: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`). */
+                category: components["schemas"]["NotificationCategoryKey"];
+            };
+            cookie?: never;
+        };
+        /** @description Nowy stan włączenia powiadomień w tej kategorii. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateNotificationPreference"];
+            };
+        };
+        responses: {
+            /** @description Zaktualizowane ustawienie kategorii powiadomień. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferenceResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getUnsubscribeNotificationPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058). */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Strona HTML z formularzem potwierdzenia wyłączenia powiadomień. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    unsubscribeNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058). */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Powiadomienia e-mail dla wskazanej kategorii zostały wyłączone. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnsubscribeNotificationResponse"];
+                    "text/html": string;
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                    "text/html": string;
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     getOpenApi: {
         parameters: {
             query?: never;
@@ -2959,6 +3280,102 @@ export interface operations {
                 };
             };
             /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak uprawnień (PERMISSION_DENIED). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Nie znaleziono zasobu (NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Konflikt stanu zasobu (CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Błędne dane wejściowe (VALIDATION_FAILED). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Wewnętrzny błąd serwera (INTERNAL_ERROR). */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    sendNotification: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`. */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Identyfikator firmy (UUID v7). */
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Dane powiadomienia zlecanego przez produkt. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateNotification"];
+            };
+        };
+        responses: {
+            /** @description Wynik przyjęcia powiadomienia (`QUEUED` albo `SKIPPED`). */
+            202: {
+                headers: {
+                    /** @description Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`. */
+                    "Idempotency-Replayed"?: "true";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResultResponse"];
+                };
+            };
+            /** @description Nieprawidłowe żądanie (VALIDATION_FAILED). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED). */
             401: {
                 headers: {
                     [name: string]: unknown;

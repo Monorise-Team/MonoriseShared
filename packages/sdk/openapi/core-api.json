@@ -64,6 +64,10 @@
     {
       "name": "Events",
       "description": "Kanał zdarzeń Core dla serwerów produktów (token maszynowy), do czasu EventBridge i SQS."
+    },
+    {
+      "name": "Notifications",
+      "description": "Wspólny moduł powiadomień e-mail produktów, preferencje odbiorców i wypisywanie RFC 8058 (ADR-0048)."
     }
   ],
   "paths": {
@@ -1784,6 +1788,250 @@
         }
       }
     },
+    "/core/v1/me/notification-preferences": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "listMyNotificationPreferences",
+        "summary": "Lista ustawień powiadomień zalogowanego użytkownika",
+        "description": "Zwraca kategorie powiadomień kanału logowania (zawsze włączone, bez możliwości wyłączenia) oraz kategorie produktów, do których bieżąca firma ma aktywny `Entitlement`, wraz z bieżącym stanem `enabled` dla konta (brak zapisu oznacza `enabled = true`).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista kategorii powiadomień wraz z ustawieniami konta.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/me/notification-preferences/{category}": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "updateMyNotificationPreference",
+        "summary": "Zmień ustawienie kategorii powiadomień e-mail",
+        "description": "Włącza albo wyłącza opcjonalną kategorię powiadomień e-mail dla zalogowanego konta w bieżącej firmie i zapisuje wpis `notification.preference_changed` w dzienniku zdarzeń. Zwraca `422 VALIDATION_FAILED` dla nieznanych kategorii oraz kategorii obowiązkowych (np. `security`, `account`).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "path",
+            "required": true,
+            "description": "Klucz kategorii powiadomień z katalogu Core (np. `timotime.reminders`, `kivotasks.assignments`).",
+            "schema": {
+              "$ref": "#/components/schemas/NotificationCategoryKey"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Nowy stan włączenia powiadomień w tej kategorii.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotificationPreference"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zaktualizowane ustawienie kategorii powiadomień.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferenceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/notifications/unsubscribe/{token}": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "getUnsubscribeNotificationPage",
+        "summary": "Strona potwierdzenia wypisania z kategorii powiadomień",
+        "description": "Publiczna strona HTML otwierana po kliknięciu linku wypisania w stopce wiadomości e-mail. Żądanie `GET` nigdy nie zmienia ustawień (chroni przed automatycznym otwieraniem linków przez skanery poczty): wyświetla nazwę kategorii i firmy oraz formularz z przyciskiem wysyłającym `POST` na ten sam adres. Nieprawidłowy, zmanipulowany albo nieaktywny link zwraca neutralną stronę HTML ze statusem `404`.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "description": "Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Strona HTML z formularzem potwierdzenia wyłączenia powiadomień.",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "unsubscribeNotification",
+        "summary": "Jednoklikowe wypisanie z kategorii powiadomień (RFC 8058)",
+        "description": "Publiczny endpoint jednoklikowego wypisania (RFC 8058 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; przyjmuje `application/x-www-form-urlencoded`, `multipart/form-data` lub puste żądanie). Nie wymaga tokenu dostępu — dowodem jest podpisany token HMAC-SHA256 sprawdzany w stałym czasie. Ustawia `enabled = false` dla kanału `EMAIL` i zapisuje wpis audytu `notification.preference_changed` (tylko przy faktycznej zmianie wartości). Gdy żądanie akceptuje `text/html` (formularz ze strony potwierdzenia), zwraca stronę HTML z potwierdzeniem albo neutralny komunikat `404`; klienci jednoklikowi dostają JSON. Nieprawidłowy, zmanipulowany albo nieaktywny token zwraca `404 NOT_FOUND`.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "description": "Podpisany token HMAC-SHA256 z linku wypisania z powiadomień (RFC 8058).",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Powiadomienia e-mail dla wskazanej kategorii zostały wyłączone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsubscribeNotificationResponse"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/core/v1/openapi.json": {
       "get": {
         "tags": [
@@ -2438,6 +2686,153 @@
           },
           "401": {
             "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED, ACCOUNT_DEACTIVATED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Brak uprawnień (PERMISSION_DENIED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nie znaleziono zasobu (NOT_FOUND).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Konflikt stanu zasobu (CONFLICT).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Błędne dane wejściowe (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Wewnętrzny błąd serwera (INTERNAL_ERROR).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/core/v1/organizations/{organizationId}/notifications": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "operationId": "sendNotification",
+        "summary": "Zleć wysyłkę powiadomienia e-mail przez produkt",
+        "description": "Endpoint maszynowy dla serwerów produktów (token OAuth 2.1 `client_credentials` z zakresem `core:notifications.send`, obsługuje nagłówek `Idempotency-Key`). Weryfikuje własność kategorii przez produkt wywołującego klienta (`403`), aktywny `Entitlement` firmy (`403`) oraz origin `actionUrl` zgodny z `uri` klienta OAuth (`422`). Gdy odbiorca nie jest aktywnym pracownikiem firmy z aktywnym kontem i dostępem do produktu, zwraca `202` ze statusem `SKIPPED` i powodem `NO_ACCESS` (bez zdradzania szczegółów); wyłączona kategoria daje `202` `SKIPPED` / `PREFERENCE_OFF`. W pozostałych przypadkach zapisuje powiadomienie `QUEUED` wraz z zadaniem w `mail_outbox` w jednej transakcji i zwraca `202`.",
+        "security": [
+          {
+            "productOAuth": [
+              "core:notifications.send"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "organizationId",
+            "in": "path",
+            "required": true,
+            "description": "Identyfikator firmy (UUID v7).",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Opcjonalny klucz powtórzenia (1–255 drukowalnych znaków ASCII, ważny 24 godziny). Powtórzone żądanie z tym samym kluczem i treścią zwraca zapisaną odpowiedź z nagłówkiem `Idempotency-Replayed: true` bez ponownego wykonania operacji; ten sam klucz z inną treścią zwraca `409 CONFLICT`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[!-~]([ -~]*[!-~])?$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Dane powiadomienia zlecanego przez produkt.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNotification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Wynik przyjęcia powiadomienia (`QUEUED` albo `SKIPPED`).",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "Ustawiany na `true`, gdy odpowiedź została odtworzona z zapisanego wyniku dla przekazanego nagłówka `Idempotency-Key`.",
+                "required": false,
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nieprawidłowe żądanie (VALIDATION_FAILED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Brak albo nieważny token dostępu albo wyłączone konto (UNAUTHENTICATED).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4816,7 +5211,8 @@
               "core:permissions.register": "Rejestracja manifestu uprawnień i gotowych ról produktu w Core.",
               "core:permissions.read": "Odczyt migawki uprawnień konta dla wskazanego produktu w Core.",
               "core:directory.read": "Odczyt katalogu pracowników i członkostw w jednostkach dla serwera produktu.",
-              "core:events.read": "Odczyt kanału zdarzeń Core dla firm z dostępem do produktu."
+              "core:events.read": "Odczyt kanału zdarzeń Core dla firm z dostępem do produktu.",
+              "core:notifications.send": "Zlecanie wysyłki powiadomień e-mail produktu przez moduł powiadomień Core."
             }
           }
         }
@@ -5271,6 +5667,49 @@
         },
         "required": [
           "email"
+        ],
+        "additionalProperties": false
+      },
+      "CreateNotification": {
+        "type": "object",
+        "properties": {
+          "recipientAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "category": {
+            "$ref": "#/components/schemas/NotificationCategoryKey"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\r\\n]+$"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          },
+          "actionUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "recipientAccountId",
+          "category",
+          "title",
+          "body"
         ],
         "additionalProperties": false
       },
@@ -6175,6 +6614,176 @@
           "error"
         ],
         "additionalProperties": false
+      },
+      "NotificationCategoryKey": {
+        "type": "string",
+        "enum": [
+          "security",
+          "account",
+          "timotime.reminders",
+          "kivotasks.assignments"
+        ]
+      },
+      "NotificationMailChannel": {
+        "type": "string",
+        "enum": [
+          "login",
+          "notifications"
+        ]
+      },
+      "NotificationPreference": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/NotificationCategoryKey"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channel": {
+            "$ref": "#/components/schemas/NotificationMailChannel"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "product",
+          "channel",
+          "optional",
+          "name",
+          "description",
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPreferenceList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/NotificationPreference"
+        }
+      },
+      "NotificationPreferenceListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotificationPreferenceList"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationPreferenceResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotificationPreference"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NotificationStatus"
+          },
+          "skipReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotificationSkipReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "skipReason"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationResultResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotificationResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "NotificationSkipReason": {
+        "type": "string",
+        "enum": [
+          "PREFERENCE_OFF",
+          "NO_ACCESS"
+        ]
+      },
+      "NotificationStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "SENT",
+          "SKIPPED",
+          "FAILED"
+        ]
       },
       "OpenApiDocument": {
         "type": "object",
@@ -7330,6 +7939,43 @@
           "TEAM"
         ]
       },
+      "UnsubscribeNotificationResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UnsubscribeNotificationResult"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ApiMeta"
+          },
+          "error": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UnsubscribeNotificationResult": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/NotificationCategoryKey"
+          },
+          "enabled": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "required": [
+          "category",
+          "enabled"
+        ],
+        "additionalProperties": false
+      },
       "UpdateEmployee": {
         "type": "object",
         "properties": {
@@ -7369,6 +8015,18 @@
             ]
           }
         },
+        "additionalProperties": false
+      },
+      "UpdateNotificationPreference": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
         "additionalProperties": false
       },
       "UpdateOrganization": {
